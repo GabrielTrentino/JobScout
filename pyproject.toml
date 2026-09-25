@@ -1,0 +1,22 @@
+[project]
+name = "jobscout"
+version = "0.1.0"
+description = "Lê um currículo neste computador e lista as atividades principais."
+requires-python = ">=3.11"
+dependencies = [
+  "pypdf>=5.1",
+  "python-docx>=1.1",
+]
+
+[project.scripts]
+jobscout = "jobscout.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["jobscout*"]
+
+[tool.setuptools.package-data]
+jobscout = ["web/index.html"]
