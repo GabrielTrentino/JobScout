@@ -391,22 +391,56 @@
       status.textContent = message;
     }
 
+    function summary(toolCount, activityCount, filename) {
+      const parts = [];
+      if (toolCount) {
+        parts.push(toolCount + (toolCount === 1 ? " ferramenta" : " ferramentas"));
+      }
+      if (activityCount) {
+        parts.push(activityCount + (activityCount === 1 ? " atividade" : " atividades"));
+      }
+      return parts.join(" e ") + " em " + filename;
+    }
+
+    function toolBlock(tools) {
+      const role = document.createElement("article");
+      role.className = "role";
+      const eyebrow = document.createElement("p");
+      eyebrow.className = "eyebrow";
+      eyebrow.textContent = "Ferramentas";
+      role.appendChild(eyebrow);
+      const list = document.createElement("ul");
+      list.className = "activities";
+      tools.forEach((item) => {
+        const line = document.createElement("li");
+        line.className = "activity";
+        line.textContent = item;
+        list.appendChild(line);
+      });
+      role.appendChild(list);
+      return role;
+    }
+
     function show(payload) {
       clear(grupos);
       status.classList.remove("is-error");
       stamp.hidden = false;
       choose.textContent = "Trocar arquivo";
       const total = payload.total || 0;
-      if (!total) {
+      const tools = payload.ferramentas || [];
+      if (!total && !tools.length) {
         status.textContent = "Li " + payload.arquivo + " e não encontrei atividades. A experiência precisa estar em texto, não só em imagem.";
         empty.hidden = true;
         return;
       }
-      const noun = total === 1 ? "atividade" : "atividades";
-      status.textContent = total + " " + noun + " em " + payload.arquivo;
+      status.textContent = summary(tools.length, total, payload.arquivo);
       empty.hidden = true;
       let previous = "";
       let delay = 0;
+      if (tools.length) {
+        grupos.appendChild(toolBlock(tools));
+        previous = "Ferramentas";
+      }
       (payload.grupos || []).forEach((group) => {
         const role = document.createElement("article");
         role.className = "role";

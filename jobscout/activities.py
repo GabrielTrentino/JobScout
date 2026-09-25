@@ -35,7 +35,7 @@ SECTION_STOP = re.compile(
 
 BULLET = re.compile(r"^(?:[-*•●▪►▸·∙‣]|\d{1,2}[\.\)\]])\s+")
 YEAR = re.compile(r"\b(?:19|20)\d{2}\b")
-SEPARATOR = re.compile(r"\s(?:\||—|–|/)\s|\s-\s")
+SEPARATOR = re.compile(r"\s(?:\||—|–|/|·)\s|\s-\s")
 
 ROLE_NOUN = re.compile(
     r"^(?:desenvolvedor(?:a)?|engenheir[oa]|analista|gerente|coordenador(?:a)?|"
@@ -246,6 +246,42 @@ def read_resume_bytes(filename: str, data: bytes) -> str:
     raise ResumeReadError("Use um arquivo PDF ou DOCX.")
 
 
+TOOL_PATTERNS = (
+    ("PySpark", (r"pyspark",)),
+    ("PL/SQL", (r"pl/sql", r"plsql")),
+    ("Power BI", (r"power\s*bi",)),
+    ("Informatica Cloud", (r"informatica", r"iics")),
+    ("Apache Airflow", (r"apache airflow", r"airflow", r"composer")),
+    ("Cloud Functions", (r"cloud functions",)),
+    ("Cloud Scheduler", (r"cloud scheduler",)),
+    ("BigQuery", (r"bigquery", r"big query")),
+    ("Apache Spark", (r"apache spark", r"(?<!py)(?<![a-z0-9])spark(?![a-z0-9])")),
+    ("GitHub", (r"github",)),
+    ("Bitbucket", (r"bitbucket",)),
+    ("Databricks", (r"databricks",)),
+    ("Python", (r"python",)),
+    ("SQL", (r"(?<!pl/)(?<![a-z0-9])sql(?![a-z0-9])",)),
+    ("Linux", (r"linux",)),
+    ("GCP", (r"(?<![a-z0-9])gcp(?![a-z0-9])", r"google cloud")),
+    ("Azure", (r"azure",)),
+    ("AWS", (r"(?<![a-z0-9])aws(?![a-z0-9])",)),
+    ("Git", (r"(?<![a-z0-9])git(?!hub)(?![a-z0-9])",)),
+    ("Jira", (r"jira",)),
+    ("dbt", (r"(?<![a-z0-9])dbt(?![a-z0-9])",)),
+)
+
+
+def list_tools(text: str) -> list[str]:
+    folded = fold(text)
+    found: list[tuple[int, str]] = []
+    for name, patterns in TOOL_PATTERNS:
+        spots = [match.start() for pattern in patterns if (match := re.search(pattern, folded))]
+        if spots:
+            found.append((min(spots), name))
+    found.sort()
+    return [name for _, name in found]
+
+
 def list_activities(text: str) -> list[dict[str, str | list[str]]]:
     lines = _lines(text)
     sections = _sections(lines)
@@ -337,6 +373,11 @@ def _parse_section(lines: list[str], secao: str) -> list[dict[str, str | list[st
                 "atividades": [],
             }
             groups.append(current)
+            continue
+        if current and current["atividades"] and _hangs(str(current["atividades"][-1])) and not BULLET.match(raw):
+            activities = current["atividades"]
+            assert isinstance(activities, list)
+            activities[-1] = clean_space(f"{activities[-1]} {raw}")
             continue
         if _is_activity(raw):
             if current is None:
@@ -436,13 +477,16 @@ def _is_date_only(line: str) -> bool:
 def _is_role(line: str, following: list[str]) -> bool:
     if _is_noise(line) or _is_date_only(line) or BULLET.match(line):
         return False
-    if len(line) > 90 or line.endswith("."):
+    if line.endswith("."):
         return False
     folded = fold(line)
+    named_role = ROLE_NOUN.match(folded) is not None
+    if len(line) > (180 if named_role else 90):
+        return False
     has_separator = SEPARATOR.search(line) is not None
     if _starts_with_action(line) and not has_separator and not YEAR.search(line):
         return False
-    if has_separator or ROLE_NOUN.match(folded):
+    if has_separator or named_role:
         return True
     if YEAR.search(line):
         return True
@@ -464,6 +508,10 @@ def _is_activity(line: str) -> bool:
     return _starts_with_action(content)
 
 
+def _hangs(text: str) -> bool:
+    return text.rstrip().endswith(("—", "–", "-", ":", ","))
+
+
 def _is_continuation(line: str) -> bool:
     if _is_header(line) or BULLET.match(line) or _is_date_only(line) or _starts_with_action(line):
         return False
@@ -483,18 +531,18 @@ def _split_period(line: str) -> tuple[str, str]:
         match = candidate
         break
     if not match:
-        context = clean_space(SEPARATOR.sub(" — ", line).strip(" -—–|"))
+        context = clean_space(SEPARATOR.sub(" — ", line).strip(" -—–|·"))
         return context, ""
     context = clean_space(line[: match.start()])
     period = _clean_period(line[match.start() :])
-    context = clean_space(SEPARATOR.sub(" — ", context).strip(" -—–|"))
+    context = clean_space(SEPARATOR.sub(" — ", context).strip(" -—–|·"))
     if len(fold(re.sub(r"[^A-Za-zÀ-ÿ]", "", context))) < 3:
         return clean_space(line), ""
     return context, period
 
 
 def _clean_period(line: str) -> str:
-    return clean_space(line.strip(" -—–|"))
+    return clean_space(line.strip(" -—–|·"))
 
 
 def _clean_activity(line: str) -> str:

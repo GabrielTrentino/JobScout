@@ -373,7 +373,7 @@ JOBSCOUT_DATA_DIR=
 
 `python -m jobscout` abre uma tela local no navegador. Ela faz uma coisa: receber o currículo e listar as atividades principais.
 
-A bandeja aceita PDF ou DOCX, arrastado ou escolhido. A leitura é local, sem chave de IA. O texto não sai do computador. A coluna ao lado agrupa as atividades pelo cargo encontrado na experiência e, quando existe, em projetos. Formação, resumo e lista de habilidades não entram nessa lista.
+A bandeja aceita PDF ou DOCX, arrastado ou escolhido. A leitura é local, sem chave de IA. O texto não sai do computador. A coluna ao lado lista as ferramentas nomeadas na stack e agrupa as atividades pelo cargo encontrado na experiência e, quando existe, em projetos. Formação e resumo não entram nessa lista.
 
 Se o arquivo não tiver texto (currículo só em imagem), a tela diz que leu o arquivo e não encontrou atividades.
 

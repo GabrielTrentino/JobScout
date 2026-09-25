@@ -49,6 +49,7 @@ class ServerTest(unittest.TestCase):
             result = json.loads(response.read().decode("utf-8"))
         self.assertEqual(result["modo"], "local")
         self.assertEqual(result["total"], 1)
+        self.assertEqual(result["ferramentas"], [])
         self.assertEqual(result["grupos"][0]["atividades"][0], "Modelei o fluxo de pedidos do comercial")
 
     def test_rejects_other_extensions(self) -> None:

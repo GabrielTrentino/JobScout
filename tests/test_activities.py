@@ -5,7 +5,7 @@ from tempfile import TemporaryDirectory
 
 from docx import Document
 
-from jobscout.activities import ResumeReadError, list_activities, read_resume
+from jobscout.activities import ResumeReadError, list_activities, list_tools, read_resume
 
 
 CURRICULO = """
@@ -85,6 +85,64 @@ class ActivitiesTest(unittest.TestCase):
         self.assertEqual(len(activities), 2)
         self.assertEqual(groups[0]["contexto"], "")
         self.assertNotIn("marina@email.com", " ".join(activities))
+
+    def test_lists_tools_and_keeps_long_roles_apart(self) -> None:
+        text = """
+        Stack técnica
+        Linguagens Python (7 anos) · PySpark (4 anos) · SQL · PL/SQL · Linux
+        Cloud GCP — Airflow · BigQuery · Cloud Functions · Cloud Scheduler · Azure (2 anos) · AWS CCP
+        Dados Power BI · Informatica Cloud (IICS) · Databricks · dbt · Apache Spark
+        Dev Git/GitHub · Bitbucket · Jira
+
+        Experiência profissional
+        Engenheiro de Dados · Planal Lubrificantes LTDA · Mar/2024 – Atual · Goiânia, GO
+        • Estruturei do zero o ecossistema de dados com pipelines e dashboards financeiros.
+        • Automatizei cálculo de pedidos via interface web eliminando a precificação manual.
+
+        Engenheiro de Dados (Trainee → Pleno) · Accenture & Tenbu · Jul/2021 – Mar/2024 · Home Office
+        Analytics Engineer em DataLakes de missão crítica para seguros e saúde (GCP e Azure).
+        • Construí e sustentei 40+ DAGs em Apache Airflow (GCP Composer) para pipelines.
+        • Projetei DataLake premiado em governança com arquitetura Raw para Refined.
+
+        Analista de Dados Jr. · Planal Lubrificantes LTDA · Jan/2019 – Jun/2021 · Goiânia, GO
+        • Automatizei extração de dados de estoque e vendas com Python e PL/SQL.
+        """
+        tools = list_tools(text)
+        self.assertEqual(
+            tools,
+            [
+                "Python",
+                "PySpark",
+                "SQL",
+                "PL/SQL",
+                "Linux",
+                "GCP",
+                "Apache Airflow",
+                "BigQuery",
+                "Cloud Functions",
+                "Cloud Scheduler",
+                "Azure",
+                "AWS",
+                "Power BI",
+                "Informatica Cloud",
+                "Databricks",
+                "dbt",
+                "Apache Spark",
+                "Git",
+                "GitHub",
+                "Bitbucket",
+                "Jira",
+            ],
+        )
+        groups = list_activities(text)
+        contexts = [group["contexto"] for group in groups]
+        self.assertEqual(len(contexts), 3)
+        self.assertIn("Planal", contexts[0])
+        self.assertIn("Accenture", contexts[1])
+        self.assertIn("Analista", contexts[2])
+        accenture = " ".join(groups[1]["atividades"])
+        self.assertIn("Apache Airflow", accenture)
+        self.assertNotIn("Apache Airflow", " ".join(groups[0]["atividades"]))
 
     def test_empty_text_has_no_activities(self) -> None:
         self.assertEqual(list_activities("   "), [])

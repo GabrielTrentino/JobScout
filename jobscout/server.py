@@ -10,7 +10,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from jobscout.activities import MAX_BYTES, ResumeReadError, list_activities, read_resume_bytes
+from jobscout.activities import (
+    MAX_BYTES,
+    ResumeReadError,
+    list_activities,
+    list_tools,
+    read_resume_bytes,
+)
 
 PAGE = Path(__file__).with_name("web") / "index.html"
 
@@ -45,6 +51,7 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(400, {"erro": str(exc)})
             return
         groups = list_activities(text)
+        tools = list_tools(text)
         total = sum(len(group["atividades"]) for group in groups)
         self._send_json(
             200,
@@ -52,6 +59,7 @@ class Handler(BaseHTTPRequestHandler):
                 "arquivo": Path(filename).name,
                 "modo": "local",
                 "total": total,
+                "ferramentas": tools,
                 "grupos": groups,
             },
         )
