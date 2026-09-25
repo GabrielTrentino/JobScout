@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JobScout — Atividades do currículo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Literata:opsz,wght@7..72,420;7..72,650&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #1c2b33;
+      --sheet: #f4f7f8;
+      --cabinet: #24556b;
+      --cabinet-deep: #16324a;
+      --stamp: #c5362b;
+      --rule: #d5dee3;
+      --muted: #3d515a;
+      --paper: #fbfcfd;
+      --tray: #e7eef2;
+      --lip: #d3e0e7;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--sheet);
+      color: var(--ink);
+      font-family: "Literata", Georgia, serif;
+      font-size: 1.05rem;
+      line-height: 1.45;
+    }
+
+    .page {
+      max-width: 68rem;
+      margin: 0 auto;
+      padding: 1.75rem 1.25rem 3rem;
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      margin-bottom: 1.75rem;
+    }
+
+    .brand,
+    .mode,
+    .tab,
+    .eyebrow,
+    .choose,
+    .stamp,
+    .count {
+      font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+    }
+
+    .brand {
+      margin: 0;
+      color: var(--cabinet-deep);
+      font-size: 1.7rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .mode {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0 0 1.25rem;
+      font-size: 2.15rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+
+    .desk {
+      display: grid;
+      grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+      gap: 1.5rem;
+      align-items: start;
+    }
+
+    .tray {
+      background: var(--tray);
+      min-height: 28rem;
+      padding: 1.1rem 1.15rem 1.3rem;
+      box-shadow: inset 0 -10px 0 var(--lip), inset 0 0 0 1px #c5d3db;
+    }
+
+    .tray.is-over .drop {
+      background: #eef5f4;
+    }
+
+    .tray-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      min-height: 3.2rem;
+    }
+
+    .tab {
+      margin: 0;
+      color: var(--cabinet);
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .stamp {
+      margin: 0.15rem 0 0;
+      border: 2px solid var(--stamp);
+      color: var(--stamp);
+      font-size: 1.15rem;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      padding: 0.12rem 0.45rem 0.02rem;
+      transform: rotate(-8deg);
+    }
+
+    .stamp[hidden] { display: none; }
+
+    .drop {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 0.85rem;
+      min-height: 14rem;
+      margin-top: 0.85rem;
+      padding: 1rem;
+      background: var(--paper);
+      cursor: pointer;
+    }
+
+    .drop:focus-within {
+      outline: 2px solid var(--cabinet);
+      outline-offset: 3px;
+    }
+
+    .drop-title {
+      font-size: 1.2rem;
+      line-height: 1.3;
+    }
+
+    .drop-file {
+      min-height: 1.4rem;
+      color: var(--cabinet-deep);
+      font-weight: 650;
+    }
+
+    .file {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .choose {
+      align-self: flex-start;
+      background: var(--cabinet);
+      color: var(--paper);
+      font-size: 1.05rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 0.45rem 0.8rem;
+    }
+
+    .hint,
+    .period,
+    .empty {
+      color: var(--muted);
+    }
+
+    .hint {
+      margin: 0.9rem 0 0;
+      font-size: 0.95rem;
+    }
+
+    .sheet {
+      background: var(--paper);
+      border-top: 4px solid var(--cabinet);
+      min-height: 28rem;
+      padding: 1.15rem 1.25rem 1.5rem;
+    }
+
+    .count {
+      margin: 0 0 1rem;
+      color: var(--cabinet-deep);
+      font-size: 1.2rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .count:empty { margin: 0; }
+
+    .count.is-error { color: var(--stamp); }
+
+    .empty {
+      margin: 0.4rem 0 0;
+      max-width: 28rem;
+    }
+
+    .role { margin-top: 1.35rem; }
+
+    .role:first-child { margin-top: 0; }
+
+    .eyebrow {
+      margin: 0 0 0.15rem;
+      color: var(--cabinet);
+      font-size: 0.92rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .role-name {
+      margin: 0;
+      font-size: 1.28rem;
+      font-weight: 650;
+      line-height: 1.25;
+    }
+
+    .period {
+      margin: 0.15rem 0 0;
+      font-size: 0.95rem;
+    }
+
+    .activities {
+      list-style: none;
+      margin: 0.7rem 0 0;
+      padding: 0;
+    }
+
+    .activity {
+      display: grid;
+      grid-template-columns: 0.7rem 1fr;
+      gap: 0.75rem;
+      align-items: start;
+      border-top: 1px solid var(--rule);
+      margin: 0;
+      padding: 0.75rem 0;
+      animation: rise 0.35s ease both;
+    }
+
+    .activity::before {
+      content: "";
+      width: 0.45rem;
+      height: 0.45rem;
+      margin-top: 0.45rem;
+      background: var(--cabinet);
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    @media (max-width: 800px) {
+      h1 { font-size: 1.75rem; }
+      .desk { grid-template-columns: 1fr; }
+      .tray,
+      .sheet { min-height: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .activity { animation: none; }
+      .stamp { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <p class="brand">JobScout</p>
+      <p class="mode">Leitura local</p>
+    </header>
+    <main>
+      <h1>Atividades do currículo</h1>
+      <div class="desk">
+        <section class="tray" id="bandeja" aria-labelledby="bandeja-titulo">
+          <div class="tray-head">
+            <h2 class="tab" id="bandeja-titulo">Currículo</h2>
+            <p class="stamp" id="stamp" hidden>Lido</p>
+          </div>
+          <label class="drop" for="arquivo">
+            <span class="drop-title" id="drop-title">Solte o PDF ou o DOCX aqui.</span>
+            <span class="drop-file" id="drop-file"></span>
+            <span class="choose" id="choose">Escolher arquivo</span>
+            <input class="file" id="arquivo" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+          </label>
+          <p class="hint">A leitura acontece neste computador.</p>
+        </section>
+        <section class="sheet" aria-labelledby="lista-titulo">
+          <h2 class="tab" id="lista-titulo">Atividades</h2>
+          <p class="count" id="status" role="status"></p>
+          <p class="empty" id="empty">Nenhuma atividade ainda. Solte o currículo na bandeja.</p>
+          <div id="grupos"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script>
+    const arquivo = document.getElementById("arquivo");
+    const bandeja = document.getElementById("bandeja");
+    const dropFile = document.getElementById("drop-file");
+    const choose = document.getElementById("choose");
+    const stamp = document.getElementById("stamp");
+    const status = document.getElementById("status");
+    const empty = document.getElementById("empty");
+    const grupos = document.getElementById("grupos");
+
+    arquivo.addEventListener("change", () => {
+      const file = arquivo.files && arquivo.files[0];
+      if (file) receive(file);
+      arquivo.value = "";
+    });
+
+    bandeja.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      bandeja.classList.add("is-over");
+    });
+
+    bandeja.addEventListener("dragleave", () => {
+      bandeja.classList.remove("is-over");
+    });
+
+    bandeja.addEventListener("drop", (event) => {
+      event.preventDefault();
+      bandeja.classList.remove("is-over");
+      const file = event.dataTransfer && event.dataTransfer.files[0];
+      if (file) receive(file);
+    });
+
+    function accepted(file) {
+      const name = file.name.toLowerCase();
+      return name.endsWith(".pdf") || name.endsWith(".docx");
+    }
+
+    function clear(node) {
+      while (node.firstChild) node.removeChild(node.firstChild);
+    }
+
+    function receive(file) {
+      dropFile.textContent = file.name;
+      stamp.hidden = true;
+      if (!accepted(file)) {
+        fail("Use um arquivo PDF ou DOCX.");
+        return;
+      }
+      const body = new FormData();
+      body.append("arquivo", file, file.name);
+      status.classList.remove("is-error");
+      status.textContent = "Lendo o currículo…";
+      empty.hidden = true;
+      clear(grupos);
+      fetch("/api/analisar", { method: "POST", body })
+        .then(async (response) => {
+          const payload = await response.json();
+          if (!response.ok) {
+            fail(payload.erro || "Não consegui ler este arquivo.");
+            return;
+          }
+          show(payload);
+        })
+        .catch(() => {
+          fail("Não consegui ler este arquivo.");
+        });
+    }
+
+    function fail(message) {
+      stamp.hidden = true;
+      choose.textContent = "Escolher arquivo";
+      empty.hidden = true;
+      clear(grupos);
+      status.classList.add("is-error");
+      status.textContent = message;
+    }
+
+    function show(payload) {
+      clear(grupos);
+      status.classList.remove("is-error");
+      stamp.hidden = false;
+      choose.textContent = "Trocar arquivo";
+      const total = payload.total || 0;
+      if (!total) {
+        status.textContent = "Li " + payload.arquivo + " e não encontrei atividades. A experiência precisa estar em texto, não só em imagem.";
+        empty.hidden = true;
+        return;
+      }
+      const noun = total === 1 ? "atividade" : "atividades";
+      status.textContent = total + " " + noun + " em " + payload.arquivo;
+      empty.hidden = true;
+      let previous = "";
+      let delay = 0;
+      (payload.grupos || []).forEach((group) => {
+        const role = document.createElement("article");
+        role.className = "role";
+        if (group.secao && group.secao !== previous) {
+          const eyebrow = document.createElement("p");
+          eyebrow.className = "eyebrow";
+          eyebrow.textContent = group.secao;
+          role.appendChild(eyebrow);
+          previous = group.secao;
+        }
+        if (group.contexto) {
+          const name = document.createElement("h3");
+          name.className = "role-name";
+          name.textContent = group.contexto;
+          role.appendChild(name);
+        }
+        if (group.periodo) {
+          const period = document.createElement("p");
+          period.className = "period";
+          period.textContent = group.periodo;
+          role.appendChild(period);
+        }
+        const list = document.createElement("ul");
+        list.className = "activities";
+        (group.atividades || []).forEach((item) => {
+          const line = document.createElement("li");
+          line.className = "activity";
+          line.style.animationDelay = Math.min(delay, 0.45) + "s";
+          delay += 0.04;
+          line.textContent = item;
+          list.appendChild(line);
+        });
+        role.appendChild(list);
+        grupos.appendChild(role);
+      });
+    }
+  </script>
+</body>
+</html>
