@@ -369,11 +369,19 @@ JOBSCOUT_DATA_DIR=
 
 `JOBSCOUT_AI_MODE=off` força o modo local mesmo se alguém passar `--ai`. `JOBSCOUT_DATA_DIR` vazio usa `%USERPROFILE%\.jobscout`.
 
+## Tela inicial
+
+`python -m jobscout` abre uma tela local no navegador. Ela faz uma coisa: receber o currículo e listar as atividades principais.
+
+A bandeja aceita PDF ou DOCX, arrastado ou escolhido. A leitura é local, sem chave de IA. O texto não sai do computador. A coluna ao lado agrupa as atividades pelo cargo encontrado na experiência e, quando existe, em projetos. Formação, resumo e lista de habilidades não entram nessa lista.
+
+Se o arquivo não tiver texto (currículo só em imagem), a tela diz que leu o arquivo e não encontrou atividades.
+
 ## Fora deste documento
 
-Ainda não há código, banco nem executável. A implementação segue esta ordem:
+A tela inicial e a leitura local do currículo já existem. Ainda não há busca de vagas, banco de acompanhamento nem o `jobscout.exe`. A ordem que falta:
 
-1. Projeto Python, comando `analyze` no modo local e `profile show`.
+1. Confirmação do perfil (chaves, senioridade, cidade) a partir das atividades.
 2. Banco local e comandos `jobs`, `open`, `visit`, `apply`, `note`, `status`, `add`, `export`.
 3. Conectores das fontes públicas e o comando `search`.
 4. Modo `--ai` opcional, com o mesmo formato de perfil.
