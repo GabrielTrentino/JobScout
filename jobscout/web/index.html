@@ -3,480 +3,301 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>JobScout — Atividades do currículo</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Literata:opsz,wght@7..72,420;7..72,650&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --ink: #1c2b33;
-      --sheet: #f4f7f8;
-      --cabinet: #24556b;
-      --cabinet-deep: #16324a;
-      --stamp: #c5362b;
-      --rule: #d5dee3;
-      --muted: #3d515a;
-      --paper: #fbfcfd;
-      --tray: #e7eef2;
-      --lip: #d3e0e7;
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      background: var(--sheet);
-      color: var(--ink);
-      font-family: "Literata", Georgia, serif;
-      font-size: 1.05rem;
-      line-height: 1.45;
-    }
-
-    .page {
-      max-width: 68rem;
-      margin: 0 auto;
-      padding: 1.75rem 1.25rem 3rem;
-    }
-
-    .top {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 1rem;
-      margin-bottom: 1.75rem;
-    }
-
-    .brand,
-    .mode,
-    .tab,
-    .eyebrow,
-    .choose,
-    .stamp,
-    .count {
-      font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
-    }
-
-    .brand {
-      margin: 0;
-      color: var(--cabinet-deep);
-      font-size: 1.7rem;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    .mode {
-      margin: 0;
-      color: var(--muted);
-      font-size: 0.95rem;
-      font-weight: 500;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-    }
-
-    h1 {
-      margin: 0 0 1.25rem;
-      font-size: 2.15rem;
-      font-weight: 650;
-      letter-spacing: -0.02em;
-      line-height: 1.15;
-    }
-
-    .desk {
-      display: grid;
-      grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
-      gap: 1.5rem;
-      align-items: start;
-    }
-
-    .tray {
-      background: var(--tray);
-      min-height: 28rem;
-      padding: 1.1rem 1.15rem 1.3rem;
-      box-shadow: inset 0 -10px 0 var(--lip), inset 0 0 0 1px #c5d3db;
-    }
-
-    .tray.is-over .drop {
-      background: #eef5f4;
-    }
-
-    .tray-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      min-height: 3.2rem;
-    }
-
-    .tab {
-      margin: 0;
-      color: var(--cabinet);
-      font-size: 1rem;
-      font-weight: 600;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-    }
-
-    .stamp {
-      margin: 0.15rem 0 0;
-      border: 2px solid var(--stamp);
-      color: var(--stamp);
-      font-size: 1.15rem;
-      font-weight: 600;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      padding: 0.12rem 0.45rem 0.02rem;
-      transform: rotate(-8deg);
-    }
-
-    .stamp[hidden] { display: none; }
-
-    .drop {
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      gap: 0.85rem;
-      min-height: 14rem;
-      margin-top: 0.85rem;
-      padding: 1rem;
-      background: var(--paper);
-      cursor: pointer;
-    }
-
-    .drop:focus-within {
-      outline: 2px solid var(--cabinet);
-      outline-offset: 3px;
-    }
-
-    .drop-title {
-      font-size: 1.2rem;
-      line-height: 1.3;
-    }
-
-    .drop-file {
-      min-height: 1.4rem;
-      color: var(--cabinet-deep);
-      font-weight: 650;
-    }
-
-    .file {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
-    }
-
-    .choose {
-      align-self: flex-start;
-      background: var(--cabinet);
-      color: var(--paper);
-      font-size: 1.05rem;
-      font-weight: 600;
-      letter-spacing: 0.04em;
-      padding: 0.45rem 0.8rem;
-    }
-
-    .hint,
-    .period,
-    .empty {
-      color: var(--muted);
-    }
-
-    .hint {
-      margin: 0.9rem 0 0;
-      font-size: 0.95rem;
-    }
-
-    .sheet {
-      background: var(--paper);
-      border-top: 4px solid var(--cabinet);
-      min-height: 28rem;
-      padding: 1.15rem 1.25rem 1.5rem;
-    }
-
-    .count {
-      margin: 0 0 1rem;
-      color: var(--cabinet-deep);
-      font-size: 1.2rem;
-      font-weight: 600;
-      letter-spacing: 0.03em;
-    }
-
-    .count:empty { margin: 0; }
-
-    .count.is-error { color: var(--stamp); }
-
-    .empty {
-      margin: 0.4rem 0 0;
-      max-width: 28rem;
-    }
-
-    .role { margin-top: 1.35rem; }
-
-    .role:first-child { margin-top: 0; }
-
-    .eyebrow {
-      margin: 0 0 0.15rem;
-      color: var(--cabinet);
-      font-size: 0.92rem;
-      font-weight: 600;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-    }
-
-    .role-name {
-      margin: 0;
-      font-size: 1.28rem;
-      font-weight: 650;
-      line-height: 1.25;
-    }
-
-    .period {
-      margin: 0.15rem 0 0;
-      font-size: 0.95rem;
-    }
-
-    .activities {
-      list-style: none;
-      margin: 0.7rem 0 0;
-      padding: 0;
-    }
-
-    .activity {
-      display: grid;
-      grid-template-columns: 0.7rem 1fr;
-      gap: 0.75rem;
-      align-items: start;
-      border-top: 1px solid var(--rule);
-      margin: 0;
-      padding: 0.75rem 0;
-      animation: rise 0.35s ease both;
-    }
-
-    .activity::before {
-      content: "";
-      width: 0.45rem;
-      height: 0.45rem;
-      margin-top: 0.45rem;
-      background: var(--cabinet);
-    }
-
-    @keyframes rise {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: none; }
-    }
-
-    @media (max-width: 800px) {
-      h1 { font-size: 1.75rem; }
-      .desk { grid-template-columns: 1fr; }
-      .tray,
-      .sheet { min-height: 0; }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .activity { animation: none; }
-      .stamp { transform: none; }
-    }
-  </style>
+  <title>JobScout — Painel</title>
+  <link rel="stylesheet" href="/app.css">
 </head>
 <body>
+  <!-- Overlay compacto: pop-ups em cima, menu e a bolha no canto inferior direito -->
+  <div class="dock" id="dock">
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+    <nav class="menu" id="menu" aria-label="Menu do JobScout" hidden>
+      <button type="button" class="menu-item" data-go="agora">Agora <small id="menu-agora"></small></button>
+      <button type="button" class="menu-item" data-go="rascunhos">Rascunhos <span class="badge" id="menu-badge" hidden>0</span></button>
+      <button type="button" class="menu-item" data-go="linha">Linha do tempo</button>
+      <button type="button" class="menu-item" data-go="kanban">Kanban</button>
+      <button type="button" class="menu-item" data-go="empresas">Empresas</button>
+      <button type="button" class="menu-item" data-go="busca">Busca</button>
+      <button type="button" class="menu-item" data-go="perfil">Perfil</button>
+      <button type="button" class="menu-item" data-go="config">Config</button>
+      <div class="menu-foot">
+        <label class="theme-switch" title="Modo noturno"><input type="checkbox" class="theme-toggle" role="switch"><span class="track"><span class="thumb"></span></span><span class="theme-label">Noturno</span></label>
+        <div class="overlay-buttons">
+          <button type="button" class="icon pin" data-pin title="Sempre por cima" aria-pressed="true">📌</button>
+          <button type="button" class="icon" data-browser title="Abrir painel completo no navegador">⤢</button>
+          <button type="button" class="icon" data-close title="Fechar o JobScout">×</button>
+        </div>
+      </div>
+    </nav>
+    <button class="bubble" id="bubble" type="button" aria-expanded="false" aria-controls="menu" title="Abrir o menu">
+      <span class="orb" id="orb">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" class="stickman" id="stickman" data-pose="idle" aria-hidden="true">
+        <!-- Parado: sentado em cima da maleta, respirando -->
+        <g class="pose pose-idle">
+          <g class="case">
+            <rect x="15" y="47" width="24" height="14" rx="2.5"/>
+            <path class="case-line" d="M15 53h24"/>
+          </g>
+          <g class="body breathe">
+            <circle class="head" cx="27" cy="24" r="6"/>
+            <path d="M27 30v16"/>
+            <path d="M27 34l9 8 1 -1"/>
+            <path d="M27 34l7 9"/>
+            <path d="M27 46h13l3 14"/>
+            <path d="M27 46h10l5 14"/>
+          </g>
+        </g>
+      
+        <!-- Lendo a vaga: em pé, mão no queixo, pensando -->
+        <g class="pose pose-think">
+          <g class="body sway">
+            <circle class="head" cx="28" cy="15" r="6"/>
+            <path d="M28 21v20"/>
+            <path d="M28 41l-6 18"/>
+            <path d="M28 41l6 18"/>
+            <path d="M28 26l8 7 -3 -9"/>
+            <path d="M28 26l-8 10"/>
+          </g>
+          <g class="case">
+            <rect x="12" y="36" width="14" height="10" rx="2"/>
+            <path class="handle" d="M17 36v-2h4v2"/>
+          </g>
+          <g class="dots">
+            <circle cx="41" cy="11" r="1.8"/>
+            <circle cx="47" cy="8" r="2.2"/>
+            <circle cx="54" cy="5" r="2.6"/>
+          </g>
+        </g>
+      
+        <!-- Enviou: arremessa a maleta. 60 quadros em fita (assets/stickman/stickman-arremesso-quadros.svg),
+             cada um com 528 de largura; o CSS desliza a fita uma vez. Escala 6x do viewBox -12 -10 88 76. -->
+        <g class="pose pose-throw">
+          <svg class="sprite" x="-4" y="-10" width="88" height="76" viewBox="0 0 528 456">
+            <g class="strip"><g transform="translate(0)"><g transform="matrix(-0.961 -0.276 0.276 -0.961 221.323 148.296)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.07 0.07 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.961 -0.276 0.276 -0.961 198.17 229.042)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(528)"><g transform="matrix(-0.963 -0.27 0.27 -0.963 220.832 148.185)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.07 0.07 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.963 -0.27 0.27 -0.963 198.113 229.054)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(1056)"><g transform="matrix(-0.968 -0.253 0.253 -0.968 219.136 147.82)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.997 -0.073 0.073 0.997 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.968 -0.253 0.253 -0.968 197.918 229.096)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(1584)"><g transform="matrix(-0.976 -0.217 0.217 -0.976 215.747 147.18)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.997 -0.077 0.077 0.997 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.976 -0.217 0.217 -0.976 197.531 229.182)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(2112)"><g transform="matrix(-0.988 -0.154 0.154 -0.988 209.818 146.339)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.996 -0.086 0.086 0.996 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.988 -0.154 0.154 -0.988 196.862 229.334)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(2640)"><g transform="matrix(-0.999 -0.049 0.049 -0.999 199.844 145.699)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.995 -0.099 0.099 0.995 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.999 -0.049 0.049 -0.999 195.75 229.599)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(3168)"><g transform="matrix(-0.992 0.123 -0.123 -0.992 183.649 146.695)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.993 -0.121 0.121 0.993 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.992 0.123 -0.123 -0.992 193.957 230.06)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(3696)"><g transform="matrix(-0.939 0.345 -0.345 -0.939 162.605 151.893)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.989 -0.149 0.149 0.989 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.939 0.345 -0.345 -0.939 191.582 230.736)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(4224)"><g transform="matrix(-0.854 0.519 -0.519 -0.854 145.952 159.585)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.985 -0.174 0.174 0.985 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.854 0.519 -0.519 -0.854 189.588 231.363)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(4752)"><g transform="matrix(-0.784 0.621 -0.621 -0.784 136.2 165.918)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.982 -0.189 0.189 0.982 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.784 0.621 -0.621 -0.784 188.329 231.786)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(5280)"><g transform="matrix(-0.736 0.677 -0.677 -0.736 130.691 170.24)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.98 -0.198 0.198 0.98 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.736 0.677 -0.677 -0.736 187.572 232.051)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(5808)"><g transform="matrix(-0.706 0.709 -0.709 -0.706 127.601 172.944)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.979 -0.204 0.204 0.979 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.706 0.709 -0.709 -0.706 187.129 232.21)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(6336)"><g transform="matrix(-0.689 0.725 -0.725 -0.689 125.998 174.435)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.978 -0.207 0.207 0.978 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.689 0.725 -0.725 -0.689 186.892 232.296)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(6864)"><g transform="matrix(-0.682 0.731 -0.731 -0.682 125.394 175.013)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.978 -0.208 0.208 0.978 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.682 0.731 -0.731 -0.682 186.802 232.329)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(7392)"><g transform="matrix(-0.712 0.703 -0.703 -0.712 128.17 172.419)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.979 -0.203 0.203 0.979 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.712 0.703 -0.703 -0.712 187.194 232.186)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(7920)"><g transform="matrix(-0.884 0.468 -0.468 -0.884 150.711 156.981)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.986 -0.169 0.169 0.986 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.884 0.468 -0.468 -0.884 189.99 231.232)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(8448)"><g transform="matrix(-0.854 -0.52 0.52 -0.854 242.598 157.161)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.061 0.061 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.854 -0.52 0.52 -0.854 198.885 228.891)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(8976)"><g transform="matrix(0.396 -0.918 0.918 0.396 287.39 260.63)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.997 0.074 -0.074 0.997 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.396 -0.918 0.918 0.396 210.268 227.341)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(9504)"><g transform="matrix(0.835 -0.551 0.551 0.835 261.898 297.267)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.991 0.137 -0.137 0.991 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.835 -0.551 0.551 0.835 215.646 227.148)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(10032)"><g transform="matrix(0.941 -0.338 0.338 0.941 246.34 306.229)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.986 0.164 -0.164 0.986 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.941 -0.338 0.338 0.941 217.955 227.17)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(10560)"><g transform="matrix(0.965 -0.262 0.262 0.965 240.776 308.247)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.985 0.173 -0.173 0.985 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.965 -0.262 0.262 0.965 218.732 227.191)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(253.659 341.812) rotate(-9.941) scale(1 1)"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(11088)"><g transform="matrix(0.987 -0.162 0.162 0.987 230.849 310.053)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.988 0.156 -0.156 0.988 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.987 -0.162 0.162 0.987 217.279 227.157)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(302.643 264.681) rotate(52.957) scale(0.997 0.997)"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(11616)"><g transform="matrix(0.998 -0.061 0.061 0.998 220.841 310.993)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.99 0.139 -0.139 0.99 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.998 -0.061 0.061 0.998 215.756 227.148)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(337.217 210.241) rotate(91.353) scale(0.99 0.99)"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(12144)"><g transform="matrix(1 0.018 -0.018 1 213.032 311.145)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.992 0.125 -0.125 0.992 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(1 0.018 -0.018 1 214.574 227.159)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(358.512 176.709) rotate(117.835) scale(0.98 0.98)"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(12672)"><g transform="matrix(0.997 0.082 -0.082 0.997 206.702 310.896)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.994 0.114 -0.114 0.994 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.997 0.082 -0.082 0.997 213.616 227.181)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(371.346 156.5) rotate(136.266) scale(0.966 0.966)"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(13200)"><g transform="matrix(0.991 0.135 -0.135 0.991 201.494 310.439)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.995 0.104 -0.104 0.995 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.991 0.135 -0.135 0.991 212.824 227.207)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(378.923 144.57) rotate(148.625) scale(0.95 0.95)"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(13728)"><g transform="matrix(0.984 0.178 -0.178 0.984 197.186 309.887)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.995 0.097 -0.097 0.995 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.984 0.178 -0.178 0.984 212.166 227.234)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(383.056 138.06) rotate(156.127) scale(0.932 0.932)"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(14256)"><g transform="matrix(0.977 0.214 -0.214 0.977 193.625 309.311)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.996 0.09 -0.09 0.996 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.977 0.214 -0.214 0.977 211.618 227.26)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(384.805 135.306) rotate(159.591) scale(0.913 0.913)"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(14784)"><g transform="matrix(0.97 0.244 -0.244 0.97 190.698 308.753)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.996 0.085 -0.085 0.996 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.97 0.244 -0.244 0.97 211.166 227.285)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(385.193 135.339) rotate(161.359) scale(0.891 0.891)"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(15312)"><g transform="matrix(0.964 0.268 -0.268 0.964 188.318 308.244)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.997 0.08 -0.08 0.997 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.964 0.268 -0.268 0.964 210.796 227.307)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(386.828 138.205) rotate(170.584) scale(0.868 0.868)"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(15840)"><g transform="matrix(0.958 0.287 -0.287 0.958 186.419 307.8)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.997 0.077 -0.077 0.997 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.958 0.287 -0.287 0.958 210.499 227.326)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(390.371 144.417) rotate(186.12) scale(0.843 0.843)"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(16368)"><g transform="matrix(0.953 0.301 -0.301 0.953 184.945 307.433)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.997 0.074 -0.074 0.997 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.953 0.301 -0.301 0.953 210.268 227.341)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(396.208 154.65) rotate(206.316) scale(0.817 0.817)" opacity="0.934"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(16896)"><g transform="matrix(0.95 0.312 -0.312 0.95 183.854 307.149)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.997 0.072 -0.072 0.997 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.95 0.312 -0.312 0.95 210.096 227.353)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(404.901 169.891) rotate(230.211) scale(0.79 0.79)" opacity="0.777"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(17424)"><g transform="matrix(0.947 0.32 -0.32 0.947 183.109 306.948)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.997 0.071 -0.071 0.997 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.947 0.32 -0.32 0.947 209.979 227.361)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(417.339 191.699) rotate(257.234) scale(0.762 0.762)" opacity="0.561"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(17952)"><g transform="matrix(0.946 0.324 -0.324 0.946 182.679 306.83)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 0.07 -0.07 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.946 0.324 -0.324 0.946 209.911 227.366)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(435.127 222.885) rotate(287.093) scale(0.732 0.732)" opacity="0.301"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(18480)"><g transform="matrix(0.946 0.326 -0.326 0.946 182.541 306.791)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 0.07 -0.07 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.946 0.326 -0.326 0.946 209.889 227.368)"><path d="M 0 0 C 0 0 0 84 0 84"/></g><g transform="translate(462 270) rotate(320) scale(0.7 0.7)" opacity="0"><rect x="-12" y="-39" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="-27" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g></g><g transform="translate(19008)"><g transform="matrix(0.951 0.309 -0.309 0.951 183.876 307.264)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 0.069 -0.069 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.951 0.309 -0.309 0.951 209.824 227.372)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(19536)"><g transform="matrix(0.966 0.257 -0.257 0.966 188.048 308.569)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 0.067 -0.067 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.966 0.257 -0.257 0.966 209.623 227.387)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(20064)"><g transform="matrix(0.986 0.166 -0.166 0.986 195.336 310.249)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 0.063 -0.063 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.986 0.166 -0.166 0.986 209.279 227.414)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(20592)"><g transform="matrix(0.999 0.034 -0.034 0.999 205.951 311.406)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 0.057 -0.057 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.999 0.034 -0.034 0.999 208.787 227.454)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(21120)"><g transform="matrix(0.99 -0.139 0.139 0.99 219.804 310.699)" opacity="0"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.999 0.049 -0.049 0.999 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.99 -0.139 0.139 0.99 208.148 227.511)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(21648)"><g transform="matrix(0.382 -0.139 0.139 0.382 236.201 306.484)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.999 0.04 -0.04 0.999 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.939 -0.343 0.343 0.939 207.369 227.587)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(22176)"><g transform="matrix(0.6 -0.406 0.406 0.6 253.572 297.232)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(1 0.029 -0.029 1 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.828 -0.561 0.561 0.828 206.465 227.685)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(22704)"><g transform="matrix(0.602 -0.709 0.709 0.602 269.506 282.161)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(1 0.017 -0.017 1 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.647 -0.762 0.762 0.647 205.465 227.804)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(23232)"><g transform="matrix(0.42 -0.951 0.951 0.42 281.258 261.846)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(1 0.005 -0.005 1 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.404 -0.915 0.915 0.404 204.404 227.943)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(23760)"><g transform="matrix(0.132 -1.069 1.069 0.132 286.7 238.354)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(1 -0.008 0.008 1 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(0.122 -0.993 0.993 0.122 203.328 228.099)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(24288)"><g transform="matrix(-0.173 -1.054 1.054 -0.173 285.172 214.645)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(1 -0.02 0.02 1 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.162 -0.987 0.987 -0.162 202.283 228.263)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(24816)"><g transform="matrix(-0.431 -0.943 0.943 -0.431 277.711 193.514)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.999 -0.032 0.032 0.999 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.416 -0.91 0.91 -0.416 201.311 228.428)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(25344)"><g transform="matrix(-0.623 -0.793 0.793 -0.623 266.508 176.703)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.999 -0.042 0.042 0.999 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.618 -0.786 0.786 -0.618 200.446 228.585)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(25872)"><g transform="matrix(-0.763 -0.647 0.647 -0.763 254.026 164.649)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.999 -0.051 0.051 0.999 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.763 -0.647 0.647 -0.763 199.71 228.726)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(26400)"><g transform="matrix(-0.858 -0.514 0.514 -0.858 242.309 156.799)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.058 0.058 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.858 -0.514 0.514 -0.858 199.117 228.844)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(26928)"><g transform="matrix(-0.914 -0.405 0.405 -0.914 232.703 152.139)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.064 0.064 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.914 -0.405 0.405 -0.914 198.67 228.936)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(27456)"><g transform="matrix(-0.945 -0.328 0.328 -0.945 225.904 149.641)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.067 0.067 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.945 -0.328 0.328 -0.945 198.368 228.999)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(27984)"><g transform="matrix(-0.959 -0.285 0.285 -0.959 222.151 148.52)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.069 0.069 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.959 -0.285 0.285 -0.959 198.205 229.034)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(28512)"><g transform="matrix(-0.961 -0.276 0.276 -0.961 221.323 148.296)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.07 0.07 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.961 -0.276 0.276 -0.961 198.17 229.042)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(29040)"><g transform="matrix(-0.961 -0.276 0.276 -0.961 221.323 148.296)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.07 0.07 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.961 -0.276 0.276 -0.961 198.17 229.042)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(29568)"><g transform="matrix(-0.961 -0.276 0.276 -0.961 221.323 148.296)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.07 0.07 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.961 -0.276 0.276 -0.961 198.17 229.042)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(30096)"><g transform="matrix(-0.961 -0.276 0.276 -0.961 221.323 148.296)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.07 0.07 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.961 -0.276 0.276 -0.961 198.17 229.042)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(30624)"><g transform="matrix(-0.961 -0.276 0.276 -0.961 221.323 148.296)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.07 0.07 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.961 -0.276 0.276 -0.961 198.17 229.042)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g><g transform="translate(31152)"><g transform="matrix(-0.961 -0.276 0.276 -0.961 221.323 148.296)"><rect x="-12" y="0" width="24" height="12" rx="4" fill="none" stroke="rgb(111,76,24)" stroke-width="10"/><rect x="-39" y="12" width="78" height="54" rx="12" fill="rgb(201,138,43)" stroke="rgb(111,76,24)" stroke-width="10"/></g><g transform="translate(216 412)"><ellipse cx="0" cy="0" rx="65" ry="8" class="shadow"/></g><g transform="translate(216 312)"><path d="M -36 96 C -36 96 0 0 0 0 C 0 0 36 96 36 96"/></g><g transform="matrix(0.998 -0.07 0.07 0.998 216 312)"><path d="M 0 0 C 0 0 -12 -102 -12 -102 M -12 -84 C -12 -84 14 -56 14 -56 C 14 -56 34 -70 34 -70"/><ellipse cx="-12" cy="-138" rx="36" ry="36"/></g><g transform="matrix(-0.961 -0.276 0.276 -0.961 198.17 229.042)"><path d="M 0 0 C 0 0 0 84 0 84"/></g></g></g>
+          </svg>
+        </g>
+      </svg>
+      </span>
+      <span class="bubble-text"><strong>JobScout</strong><small id="bubble-sub">Tudo em dia</small></span>
+      <span class="bubble-count" id="bubble-count" hidden>0</span>
+    </button>
+  </div>
+
+  <div class="overlay-bar pywebview-drag-region" id="overlay-bar">
+    <button type="button" class="icon" id="ov-min" title="Minimizar para a bolha">▾</button>
+    <p class="brand">JobScout</p>
+    <span class="live" id="overlay-live">offline</span>
+    <div class="overlay-buttons">
+      <label class="theme-switch" title="Modo noturno"><input type="checkbox" class="theme-toggle" role="switch"><span class="track"><span class="thumb"></span></span><span class="theme-label">Noturno</span></label>
+      <button type="button" class="icon pin" data-pin title="Sempre por cima" aria-pressed="true">📌</button>
+      <button type="button" class="icon" id="ov-wide" title="Expandir (cobrir mais tela)">⇔</button>
+      <button type="button" class="icon" data-browser title="Abrir painel completo no navegador">⤢</button>
+      <button type="button" class="icon" data-close title="Fechar o JobScout">×</button>
+    </div>
+  </div>
+
   <div class="page">
     <header class="top">
       <p class="brand">JobScout</p>
-      <p class="mode">Leitura local</p>
-    </header>
-    <main>
-      <h1>Atividades do currículo</h1>
-      <div class="desk">
-        <section class="tray" id="bandeja" aria-labelledby="bandeja-titulo">
-          <div class="tray-head">
-            <h2 class="tab" id="bandeja-titulo">Currículo</h2>
-            <p class="stamp" id="stamp" hidden>Lido</p>
-          </div>
-          <label class="drop" for="arquivo">
-            <span class="drop-title" id="drop-title">Solte o PDF ou o DOCX aqui.</span>
-            <span class="drop-file" id="drop-file"></span>
-            <span class="choose" id="choose">Escolher arquivo</span>
-            <input class="file" id="arquivo" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
-          </label>
-          <p class="hint">A leitura acontece neste computador.</p>
-        </section>
-        <section class="sheet" aria-labelledby="lista-titulo">
-          <h2 class="tab" id="lista-titulo">Atividades</h2>
-          <p class="count" id="status" role="status"></p>
-          <p class="empty" id="empty">Nenhuma atividade ainda. Solte o currículo na bandeja.</p>
-          <div id="grupos"></div>
-        </section>
+      <nav class="tabs" aria-label="Cenários">
+        <a class="tablink" href="#agora" data-view="agora">Agora</a>
+        <a class="tablink" href="#rascunhos" data-view="rascunhos">Rascunhos <span class="badge" id="badge" hidden>0</span></a>
+        <a class="tablink" href="#linha" data-view="linha">Linha do tempo</a>
+        <a class="tablink" href="#kanban" data-view="kanban">Kanban</a>
+        <a class="tablink" href="#empresas" data-view="empresas">Empresas</a>
+        <a class="tablink" href="#busca" data-view="busca">Busca</a>
+        <a class="tablink" href="#perfil" data-view="perfil">Perfil</a>
+        <a class="tablink" href="#config" data-view="config">Config</a>
+      </nav>
+      <div class="top-actions">
+        <button class="ghost" id="add-job" type="button">+ Vaga por link</button>
+        <label class="switch"><input type="checkbox" id="popup-toggle"> Popups</label>
+        <label class="theme-switch" title="Modo noturno"><input type="checkbox" class="theme-toggle" role="switch"><span class="track"><span class="thumb"></span></span><span class="theme-label">Noturno</span></label>
+        <span class="live" id="live" title="Conexão ao vivo">offline</span>
       </div>
+    </header>
+
+    <main>
+      <section class="view" id="view-agora" aria-labelledby="t-agora" hidden>
+        <div class="view-head">
+          <h1 id="t-agora">Agora</h1>
+          <p class="lede" id="now-status">Aguardando…</p>
+        </div>
+        <section class="now-block">
+          <div class="row now-head">
+            <h2 class="tab" id="now-waiting-title">Aguardando você</h2>
+            <span class="when" id="now-waiting-count"></span>
+          </div>
+          <div id="now-draft"></div>
+        </section>
+        <section class="now-block">
+          <h2 class="tab">O que está acontecendo</h2>
+          <ol class="feed" id="feed"></ol>
+        </section>
+      </section>
+
+      <section class="view" id="view-rascunhos" aria-labelledby="t-rascunhos" hidden>
+        <div class="view-head">
+          <h1 id="t-rascunhos">Rascunhos</h1>
+          <p class="lede">Nada capturado entra no histórico sem passar por aqui. Revise, ajuste e aprove.</p>
+        </div>
+        <div class="toolbar">
+          <div class="segmented" role="group" aria-label="Filtro">
+            <button type="button" class="seg is-on" data-filter="pendente">Pendentes</button>
+            <button type="button" class="seg" data-filter="aprovado">Aprovados</button>
+            <button type="button" class="seg" data-filter="descartado">Descartados</button>
+          </div>
+          <label class="ghost file-button">Importar e-mail (.eml)
+            <input class="file" id="eml" type="file" accept=".eml,message/rfc822">
+          </label>
+        </div>
+        <p class="notice" id="drafts-notice" role="status"></p>
+        <div class="draft-list" id="draft-list"></div>
+      </section>
+
+      <section class="view" id="view-linha" aria-labelledby="t-linha" hidden>
+        <div class="view-head">
+          <h1 id="t-linha">Linha do tempo</h1>
+          <p class="lede">Cada movimento fica gravado neste computador.</p>
+        </div>
+        <div class="filters" id="timeline-filters">
+          <label>Empresa <select id="f-empresa"></select></label>
+          <label>Vaga <select id="f-vaga"></select></label>
+          <label>Senioridade <select id="f-senioridade"></select></label>
+          <label>Tipo <select id="f-tipo"></select></label>
+          <button type="button" class="ghost" id="f-limpar">Limpar filtros</button>
+        </div>
+        <div class="pending-strip" id="timeline-pending"></div>
+        <ol class="timeline" id="timeline"></ol>
+      </section>
+
+      <section class="view" id="view-kanban" aria-labelledby="t-kanban" hidden>
+        <div class="view-head">
+          <h1 id="t-kanban">Kanban</h1>
+          <p class="lede" id="kanban-lede">Arraste o cartão para mudar o status. A coluna Rascunho espera a sua aprovação.</p>
+        </div>
+        <div class="board" id="board"></div>
+      </section>
+
+      <section class="view" id="view-empresas" aria-labelledby="t-empresas" hidden>
+        <div class="view-head">
+          <h1 id="t-empresas">Empresas</h1>
+          <p class="lede">Cadastradas a partir das vagas aprovadas, com os dados públicos da página da empresa no LinkedIn.</p>
+        </div>
+        <div class="row"><input type="search" id="company-q" placeholder="Filtrar por nome, setor ou cidade" aria-label="Filtrar empresas"></div>
+        <div class="company-grid" id="company-list"></div>
+      </section>
+
+      <section class="view" id="view-empresa" aria-label="Empresa" hidden>
+        <div id="company-page"></div>
+      </section>
+
+      <section class="view" id="view-busca" aria-labelledby="t-busca" hidden>
+        <div class="view-head">
+          <h1 id="t-busca">Busca</h1>
+          <p class="lede">Pergunte sobre o histórico: “o que respondi sobre pretensão salarial na Acme?”</p>
+        </div>
+        <form class="search" id="search-form">
+          <input type="search" id="search-q" placeholder="Pergunta ou palavras" aria-label="Busca">
+          <button type="submit">Buscar</button>
+        </form>
+        <ol class="results" id="results"></ol>
+      </section>
+
+      <section class="view" id="view-perfil" aria-labelledby="t-perfil" hidden>
+        <div class="view-head">
+          <h1 id="t-perfil">Perfil</h1>
+          <p class="lede">Fonte única dos fatos usados no autopreenchimento e nas sugestões. A IA não usa nada além disto.</p>
+        </div>
+        <form class="profile" id="profile-form">
+          <div class="grid" id="profile-fields"></div>
+          <h2 class="tab">Histórias</h2>
+          <p class="hint">Projetos e conquistas com números. Cada uma vira matéria-prima para respostas abertas.</p>
+          <div id="stories"></div>
+          <div class="row">
+            <button type="button" class="ghost" id="add-story">+ História</button>
+            <label class="ghost file-button">Ler currículo (PDF/DOCX)
+              <input class="file" id="resume" type="file" accept=".pdf,.docx">
+            </label>
+          </div>
+          <p class="notice" id="profile-notice" role="status"></p>
+          <button type="submit">Salvar perfil</button>
+        </form>
+        <section class="section">
+          <h2 class="tab">Respostas que você já deu</h2>
+          <p class="hint">A extensão usa estas respostas para preencher a mesma pergunta em outros formulários. Campos preenchidos assim ficam com contorno verde; revise antes de enviar.</p>
+          <ul class="answers-list" id="history-list"></ul>
+        </section>
+      </section>
+
+      <section class="view" id="view-config" aria-labelledby="t-config" hidden>
+        <div class="view-head">
+          <h1 id="t-config">Configuração</h1>
+        </div>
+        <div class="cards">
+          <article class="sheet">
+            <h2 class="tab">Aparência</h2>
+            <label class="theme-switch"><input type="checkbox" class="theme-toggle" role="switch"><span class="track"><span class="thumb"></span></span><span class="theme-label">Modo noturno</span></label>
+            <p class="hint">Sem escolha manual, segue o tema do Windows.</p>
+            <button type="button" class="ghost" id="theme-auto">Seguir o sistema</button>
+          </article>
+          <article class="sheet">
+            <h2 class="tab">Pop-ups da bolha</h2>
+            <p class="hint">Quais avisos aparecem sobre a bolha quando o JobScout está compacto.</p>
+            <div class="toggles" id="toast-prefs"></div>
+          </article>
+          <article class="sheet">
+            <h2 class="tab">Vagas frias</h2>
+            <p id="cold-info"></p>
+            <p class="hint">Vaga em aberto sem movimento por esse tempo vira um rascunho “Marcar como fria”. Ajuste no .env com JOBSCOUT_DIAS_FRIA.</p>
+            <button type="button" class="ghost" id="cold-check">Verificar agora</button>
+            <p class="notice" id="cold-notice" role="status"></p>
+          </article>
+          <article class="sheet">
+            <h2 class="tab">Gmail</h2>
+            <div id="gmail"></div>
+          </article>
+          <article class="sheet">
+            <h2 class="tab">Modelos por tarefa</h2>
+            <dl class="models" id="models"></dl>
+            <p class="hint">Defina no .env: JOBSCOUT_LLM_RESPONDER=ollama:gemma4:e4b. E-mails só vão para modelo local.</p>
+          </article>
+          <article class="sheet">
+            <h2 class="tab">Extensão</h2>
+            <p>Em chrome://extensions, ative o modo do desenvolvedor e carregue a pasta <code>extension</code> do projeto.</p>
+            <p><a href="/api/exportar.csv">Exportar candidaturas (CSV)</a></p>
+          </article>
+          <article class="sheet">
+            <h2 class="tab">Falhas de captura</h2>
+            <ol class="failures" id="failures"></ol>
+          </article>
+        </div>
+      </section>
     </main>
   </div>
-  <script>
-    const arquivo = document.getElementById("arquivo");
-    const bandeja = document.getElementById("bandeja");
-    const dropFile = document.getElementById("drop-file");
-    const choose = document.getElementById("choose");
-    const stamp = document.getElementById("stamp");
-    const status = document.getElementById("status");
-    const empty = document.getElementById("empty");
-    const grupos = document.getElementById("grupos");
 
-    arquivo.addEventListener("change", () => {
-      const file = arquivo.files && arquivo.files[0];
-      if (file) receive(file);
-      arquivo.value = "";
-    });
+  <aside class="queue" id="queue" aria-live="polite" hidden></aside>
 
-    bandeja.addEventListener("dragover", (event) => {
-      event.preventDefault();
-      bandeja.classList.add("is-over");
-    });
+  <dialog class="drawer" id="drawer">
+    <div class="drawer-body" id="drawer-body"></div>
+  </dialog>
 
-    bandeja.addEventListener("dragleave", () => {
-      bandeja.classList.remove("is-over");
-    });
+  <dialog class="modal" id="job-modal">
+    <form method="dialog" id="job-form" class="profile">
+      <h2 class="tab">Adicionar vaga por link</h2>
+      <p class="hint">Link do LinkedIn basta: título, empresa e detalhes vêm da página pública da vaga.</p>
+      <label>Link <input name="url" type="url" required></label>
+      <label>Título <input name="title"></label>
+      <label>Empresa <input name="company"></label>
+      <label>Local <input name="location"></label>
+      <label>Status <select name="status" id="job-form-status"></select></label>
+      <p class="notice" id="job-form-notice" role="status"></p>
+      <div class="row">
+        <button type="submit" value="ok">Salvar</button>
+        <button type="button" class="ghost" id="job-cancel">Cancelar</button>
+      </div>
+    </form>
+  </dialog>
 
-    bandeja.addEventListener("drop", (event) => {
-      event.preventDefault();
-      bandeja.classList.remove("is-over");
-      const file = event.dataTransfer && event.dataTransfer.files[0];
-      if (file) receive(file);
-    });
-
-    function accepted(file) {
-      const name = file.name.toLowerCase();
-      return name.endsWith(".pdf") || name.endsWith(".docx");
-    }
-
-    function clear(node) {
-      while (node.firstChild) node.removeChild(node.firstChild);
-    }
-
-    function receive(file) {
-      dropFile.textContent = file.name;
-      stamp.hidden = true;
-      if (!accepted(file)) {
-        fail("Use um arquivo PDF ou DOCX.");
-        return;
-      }
-      const body = new FormData();
-      body.append("arquivo", file, file.name);
-      status.classList.remove("is-error");
-      status.textContent = "Lendo o currículo…";
-      empty.hidden = true;
-      clear(grupos);
-      fetch("/api/analisar", { method: "POST", body })
-        .then(async (response) => {
-          const payload = await response.json();
-          if (!response.ok) {
-            fail(payload.erro || "Não consegui ler este arquivo.");
-            return;
-          }
-          show(payload);
-        })
-        .catch(() => {
-          fail("Não consegui ler este arquivo.");
-        });
-    }
-
-    function fail(message) {
-      stamp.hidden = true;
-      choose.textContent = "Escolher arquivo";
-      empty.hidden = true;
-      clear(grupos);
-      status.classList.add("is-error");
-      status.textContent = message;
-    }
-
-    function summary(toolCount, activityCount, filename) {
-      const parts = [];
-      if (toolCount) {
-        parts.push(toolCount + (toolCount === 1 ? " ferramenta" : " ferramentas"));
-      }
-      if (activityCount) {
-        parts.push(activityCount + (activityCount === 1 ? " atividade" : " atividades"));
-      }
-      return parts.join(" e ") + " em " + filename;
-    }
-
-    function toolBlock(tools) {
-      const role = document.createElement("article");
-      role.className = "role";
-      const eyebrow = document.createElement("p");
-      eyebrow.className = "eyebrow";
-      eyebrow.textContent = "Ferramentas";
-      role.appendChild(eyebrow);
-      const list = document.createElement("ul");
-      list.className = "activities";
-      tools.forEach((item) => {
-        const line = document.createElement("li");
-        line.className = "activity";
-        line.textContent = item;
-        list.appendChild(line);
-      });
-      role.appendChild(list);
-      return role;
-    }
-
-    function show(payload) {
-      clear(grupos);
-      status.classList.remove("is-error");
-      stamp.hidden = false;
-      choose.textContent = "Trocar arquivo";
-      const total = payload.total || 0;
-      const tools = payload.ferramentas || [];
-      if (!total && !tools.length) {
-        status.textContent = "Li " + payload.arquivo + " e não encontrei atividades. A experiência precisa estar em texto, não só em imagem.";
-        empty.hidden = true;
-        return;
-      }
-      status.textContent = summary(tools.length, total, payload.arquivo);
-      empty.hidden = true;
-      let previous = "";
-      let delay = 0;
-      if (tools.length) {
-        grupos.appendChild(toolBlock(tools));
-        previous = "Ferramentas";
-      }
-      (payload.grupos || []).forEach((group) => {
-        const role = document.createElement("article");
-        role.className = "role";
-        if (group.secao && group.secao !== previous) {
-          const eyebrow = document.createElement("p");
-          eyebrow.className = "eyebrow";
-          eyebrow.textContent = group.secao;
-          role.appendChild(eyebrow);
-          previous = group.secao;
-        }
-        if (group.contexto) {
-          const name = document.createElement("h3");
-          name.className = "role-name";
-          name.textContent = group.contexto;
-          role.appendChild(name);
-        }
-        if (group.periodo) {
-          const period = document.createElement("p");
-          period.className = "period";
-          period.textContent = group.periodo;
-          role.appendChild(period);
-        }
-        const list = document.createElement("ul");
-        list.className = "activities";
-        (group.atividades || []).forEach((item) => {
-          const line = document.createElement("li");
-          line.className = "activity";
-          line.style.animationDelay = Math.min(delay, 0.45) + "s";
-          delay += 0.04;
-          line.textContent = item;
-          list.appendChild(line);
-        });
-        role.appendChild(list);
-        grupos.appendChild(role);
-      });
-    }
-  </script>
+  <script src="/app.js"></script>
 </body>
 </html>

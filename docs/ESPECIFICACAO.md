@@ -1,388 +1,185 @@
-# JobScout
+# JobScout — especificação
 
-JobScout é um executável de linha de comando que lê o seu perfil profissional, busca vagas recentes nos principais sites e guarda o que você fez com cada uma: visitou, candidatou, arquivou, anotou ou guardou o link.
+Assistente pessoal que acompanha a busca de emprego de ponta a ponta: registra cada vaga e candidatura, ajuda a preencher formulários e reúne os retornos de recrutadores numa linha do tempo por vaga. Uma pessoa, um computador, Chrome com LinkedIn e InHire.
 
-Os dados ficam na sua máquina. A análise do currículo funciona sem inteligência artificial. A IA é opcional e só entra se você ligar uma chave no `.env`.
+Princípios:
 
-## Decisões de produto
+- O assistente sugere e preenche. O envio de candidaturas e mensagens fica sempre com o usuário.
+- **Tudo o que é capturado ou alterado automaticamente passa por um rascunho que o usuário aprova.**
+- Dados e movimentos ficam neste computador.
 
-### Analisador de currículo
+WhatsApp está fora desta versão.
 
-Sim. A busca fica genérica se as palavras-chave forem digitadas à mão. O analisador transforma o currículo em um perfil reutilizável: cargo-alvo, senioridade, habilidades, idiomas, localização e modalidade (remoto, híbrido ou presencial).
+## Arquitetura
 
-Você confirma o perfil antes da primeira busca. O programa não inventa skill que não esteja no texto, e no modo local não infere senioridade que o currículo não declare.
+```text
+Extensão Chrome (LinkedIn, InHire) ──┐
+                                     ├──► Backend local (Python, stdlib) ──► SQLite
+Gmail (somente leitura) ─────────────┘          │
+Importação .eml ─────────────────────┘          └──► Painel (SSE, ao vivo)
+```
 
-### Uso sem IA
-
-Sim. Esse é o modo padrão.
-
-| | Modo local (padrão) | Modo com IA (opcional) |
+| Peça | Onde | O que faz |
 |---|---|---|
-| Rede | Não chama nenhum modelo | Chama o provedor configurado no `.env` |
-| Chave | Não precisa | `JOBSCOUT_AI_API_KEY` |
-| Entrada | PDF ou DOCX | O mesmo arquivo |
-| Extração | Texto + seções + lista de tecnologias conhecidas | O modelo devolve o mesmo formato, com sinônimos e cargo-alvo sugerido |
-| Saída | Perfil editável | Perfil editável, com o mesmo esquema |
-| Quando falha | Mensagem clara e perfil parcial | Cai para o modo local e avisa |
+| Extensão MV3 | [extension/](../extension/) | Content scripts leem o DOM, emitem eventos, preenchem campos padrão e inserem respostas aprovadas |
+| Backend | [jobscout/server.py](../jobscout/server.py) | API REST, Server-Sent Events para o painel, poller do Gmail |
+| Rascunhos | [jobscout/assistant.py](../jobscout/assistant.py) | Transforma eventos em rascunhos; aplica a decisão do usuário |
+| Banco | [jobscout/store.py](../jobscout/store.py) | SQLite em `%USERPROFILE%\.jobscout\jobscout.db` |
+| E-mail | [jobscout/mail.py](../jobscout/mail.py), [jobscout/gmail.py](../jobscout/gmail.py) | Pré-filtro por regras, classificação, data citada, vínculo com a vaga |
+| IA | [jobscout/llm.py](../jobscout/llm.py) | `ask_llm(task, input)` com modelo escolhido por tarefa |
+| Painel | [jobscout/web/](../jobscout/web/) | Agora, Rascunhos, Linha do tempo, Kanban, Busca, Perfil, Config |
+| Overlay | [jobscout/overlay.py](../jobscout/overlay.py) | Janela pywebview (WebView2) sem borda, sempre por cima, presa à direita; recolhe numa aba na borda |
 
-Os dois modos gravam o mesmo perfil. A busca, a lista e o acompanhamento não dependem de IA.
+## Overlay e atividade
 
-### Vagas recentes e chaves principais
+`python -m jobscout` abre uma janela sem borda, sempre por cima, em quatro formatos (Win32 `SetWindowPos` em pixels físicos, cantos arredondados com `SetWindowRgn`):
 
-Cada busca devolve só vagas dentro da janela pedida (padrão: 14 dias) e mostra as chaves que bateram com o perfil. Uma vaga sem nenhuma chave principal não entra na lista, a menos que você passe `--all`.
+| Formato | Tamanho | O que mostra |
+|---|---|---|
+| bolha | 300 px, altura do conteúdo, canto inferior direito | Círculo que gira durante o processamento, contagem de pendentes, pop-ups das novidades |
+| menu | idem | Itens de navegação, chave do modo noturno, 📌, ⤢, × |
+| painel | 400 px, altura da tela, borda direita | A tela escolhida no menu |
+| amplo | 880 px, altura da tela | Kanban e página da empresa; ⇔ alterna com o painel |
 
-Chaves principais são as que você marcou no perfil (por exemplo `Python`, `FastAPI`, `PostgreSQL`). Chaves secundárias aumentam a pontuação, mas não são obrigatórias.
+Os pop-ups seguem o nível da atividade; em Config o usuário escolhe quais níveis aparecem (padrão: o que precisa dele e erros). `--navegador` abre o painel completo no navegador.
 
-### Acompanhamento
+A aba **Agora** junta o próximo rascunho pendente (Aprovar, Descartar, Depois) e o feed de atividade. O backend narra cada passo em `Hub.activity(texto, nivel)` com níveis `trabalhando`, `aviso` (precisa de você), `ok`, `info` e `erro`. Também narra o que não virou rascunho e o motivo: vaga já salva sem mudança, já nos rascunhos, descartada antes, e-mail que não parece de recrutamento, falha de seletor, IA indisponível. As últimas 150 entradas ficam em memória (`GET /api/atividade`) e chegam ao vivo pelo SSE como `{"tipo": "atividade"}`.
 
-Cada vaga salva tem link, fonte, data de publicação, chaves encontradas e um estado seu:
+Decisões tomadas a partir das questões em aberto do handoff:
 
-| Estado | Significado |
+| Questão | Decisão | Motivo |
+|---|---|---|
+| Backend | Python, só biblioteca padrão | Reaproveita o leitor de currículo; sem dependência nova |
+| Tempo real | Server-Sent Events em vez de WebSocket | O painel só recebe; SSE funciona na stdlib e reconecta sozinho |
+| Banco | SQLite local | Dados de movimentação ficam no computador |
+| Painel | Web app próprio em `127.0.0.1:8765` | Fica aberto na segunda tela, independente da aba do LinkedIn |
+| Extensão | JavaScript puro, sem build | Carrega direto em `chrome://extensions`; regras puras testadas no Node |
+| WhatsApp | Fora por enquanto | Pedido do usuário |
+
+## Rascunhos
+
+| Tipo | Nasce quando | Aprovar faz |
+|---|---|---|
+| `vaga` | Vaga aberta que ainda não existe no banco | Cria `jobs` + `applications` com o status escolhido |
+| `vaga_alteracao` | Vaga já salva aparece com título, empresa, local ou descrição diferente | Aplica só os campos marcados |
+| `status` | Clique em Enviar numa vaga já salva | Muda o status para `candidatado` |
+| `resposta` | Pergunta aberta detectada no formulário | Grava em `answers` e pede à extensão para inserir o texto no campo |
+| `mensagem` | E-mail relevante (Gmail ou `.eml`) | Grava em `messages`, vincula o contato e aplica o status proposto |
+
+Regras:
+
+- Um rascunho pendente por assunto. Nova captura do mesmo assunto atualiza o rascunho em vez de criar outro.
+- O que o usuário editou não é sobrescrito por capturas seguintes.
+- Vaga descartada não volta a ser proposta só por ser vista de novo. Se houver candidatura, volta.
+- Clique em Enviar antes de aprovar a vaga marca o próprio rascunho da vaga como `candidatado`.
+- Resposta só é aprovada depois da vaga e com texto não vazio. Mensagem só com vaga escolhida.
+- Ações feitas pelo usuário no painel (arrastar no Kanban, mudar status, nota, vaga por link) já são a decisão dele: entram direto e ficam registradas.
+
+Onde aprovar:
+
+- Aba **Rascunhos**: todos os pendentes, com filtros para aprovados e descartados.
+- **Popup** do painel: fila de um rascunho por vez (“1 de N”), com Aprovar, Descartar e Depois. Liga e desliga no topo.
+- **Kanban**: coluna Rascunho com as vagas novas.
+- **Gaveta da vaga**: rascunhos daquela vaga.
+- **Popup da extensão**: contagem no ícone e aprovação rápida; ajustes finos ficam no painel.
+
+## Extração, empresas e vagas frias
+
+- [jobscout/insights.py](../jobscout/insights.py): regras sem IA sobre título, local e descrição: skills (dicionário), inglês, modalidade, salário citado, região e senioridade. Vale para todas as fontes. O que veio da página tem prioridade; o usuário ajusta no rascunho.
+- Vaga nova do LinkedIn: uma busca na página pública traz nível de experiência, contrato, setor e o link da empresa.
+- Empresa: criada ao aprovar a vaga (chave = nome sem acento e minúsculo). Se houver link do LinkedIn, a página pública da empresa preenche setor, tamanho, sede, especializações e descrição, uma vez; o botão "Atualizar do LinkedIn" repete.
+- Respostas do formulário: a extensão acumula rótulo e valor em cada etapa (o clique é lido antes de a página trocar de etapa) e manda no `application_submitted`. Ficam no rascunho com "guardar estas respostas"; aprovadas, entram em `answers` com `origin = formulario`. `GET /api/extensao/historico` devolve a última resposta por pergunta, usada no preenchimento automático (mesmo rótulo, ou quase igual em pergunta longa).
+- Vaga fria: de hora em hora, vaga em candidatado, em análise, entrevista ou proposta sem movimento há `JOBSCOUT_DIAS_FRIA` dias vira rascunho de status para `fria`. Descartado, não volta até haver movimento novo.
+
+## Movimentos
+
+Toda criação, aprovação e descarte de rascunho, mudança de status, nota, resposta e mensagem gera uma linha em `movements` (data, tipo, resumo, origem, vaga, rascunho, detalhe). É a linha do tempo do painel e da gaveta da vaga. Exportação em CSV no painel (`/api/exportar.csv`).
+
+## Modelo de dados
+
+| Tabela | Campos principais |
 |---|---|
-| `nova` | Entrou na lista e ainda não foi aberta |
-| `vista` | Você abriu ou marcou como visitada |
-| `candidatada` | Você se candidatou |
-| `entrevista` | Há processo em andamento |
-| `oferta` | Recebeu proposta |
-| `recusada` | A empresa recusou ou você desistiu |
-| `arquivada` | Fora do fluxo, mantida no histórico |
+| `jobs` | id, source, url (canônica, única), title, company, description, location, seniority, employment_type, industry, company_url, work_mode, english, salary, region, skills, captured_at |
+| `applications` | id, job_id, status, applied_at, updated_at |
+| `answers` | id, application_id, question, answer, suggested_by_llm |
+| `contacts` | id, name, email, phone, company, role |
+| `messages` | id, application_id, contact_id, channel, external_id, subject, received_at, body, summary, classification, event_at |
+| `drafts` | id, kind, state (pendente/aprovado/descartado), dedupe_key, source, job_id, job_url, payload, original, edited |
+| `movements` | id, at, kind, summary, source, job_id, draft_id, detail |
+| `companies` | id, key, name, linkedin_url, industry, size, headquarters, specialties, description, notes, fetched_at |
+| `notes`, `insertions`, `capture_failures`, `gmail_seen` | apoio |
 
-Também dá para guardar nota livre, data da candidatura e o link original. Nada disso é enviado para fora.
+Status: visualizada → candidatado → em análise → entrevista → proposta / recusada / fria (esquecida).
 
-## Forma de distribuição
+Perfil em `profile.json`: dados pessoais, links, pretensão, disponibilidade, texto do currículo e histórias. O leitor local de currículo (PDF/DOCX) transforma as atividades em histórias editáveis.
 
-Um único executável:
+## Extensão
 
-```text
-jobscout.exe
-```
+- Content scripts em todo o `linkedin.com` (o LinkedIn troca de página sem recarregar, então quem entra pelo feed também é atendido), `*.inhire.app` e `*.inhire.com.br`. Um adaptador por site isola os seletores; a InHire tenta JSON-LD `JobPosting` antes do DOM.
+- LinkedIn: se os seletores não acharem título e empresa, a extensão manda só o link e o backend lê a página pública da vaga (`jobs-guest/jobs/api/jobPosting/<id>`, sem login, classes estáveis) em [jobscout/linkedin_public.py](../jobscout/linkedin_public.py). Uma busca por vaga; o que veio da página logada tem prioridade. Sem resposta, vira falha em Config.
+- Com o JobScout fechado, os eventos ficam numa fila na extensão (até 200) e são enviados quando ele volta, em até 1 minuto.
+- Eventos: `job_viewed`, `form_detected`, `application_submitted`, `selector_failed` (aparece em Config).
+- Campos padrão (nome, e-mail, telefone, cidade, links, pretensão) por dicionário de rótulos, sem LLM. Rótulos sobre outra pessoa ou coisa (“Nome da empresa”, “Telefone de emergência”) são ignorados. Dá para desligar no popup.
+- Perguntas abertas viram rascunho de resposta. Sugestão vem do histórico (pergunta parecida já respondida) ou da LLM, se configurada. Aprovada, a extensão insere o texto no campo.
+- Nunca clica em Enviar.
 
-No desenvolvimento o mesmo programa roda com `python -m jobscout`. O empacotamento (PyInstaller) gera o `.exe` para Windows. Configuração e banco não ficam dentro do executável:
+## E-mail
 
-```text
-%USERPROFILE%\.jobscout\
-  jobscout.db      banco local (vagas, perfil, notas)
-  profile.json     cópia legível do perfil confirmado
-```
+- Gmail via OAuth no próprio computador (PKCE, escopo `gmail.readonly`), verificação a cada `JOBSCOUT_GMAIL_INTERVALO_MIN` minutos.
+- Sem Gmail configurado, a aba Rascunhos importa arquivos `.eml`.
+- Pré-filtro por regras: domínio de empresa já acompanhada ou palavras como “processo seletivo”, “entrevista”.
+- Classificação por regras (rejeição, entrevista, documento, outro); a LLM local só entra se as regras não decidirem.
+- Convite propõe status `entrevista` e a data/hora citada; rejeição propõe `recusada`.
 
-O `.env` fica na pasta do projeto durante o desenvolvimento e ao lado do `.exe` quando você usar o executável. Os dois lugares são lidos; a variável de ambiente do sistema ganha se existir.
+## IA
 
-## Fontes
-
-A busca usa fontes com API pública ou listagem aberta. Sites que proíbem coleta automatizada ou exigem login não são raspados.
-
-| Fonte | Acesso previsto | Observação |
+| Tarefa | Variável | Privada |
 |---|---|---|
-| Remotive | API pública | Vagas remotas |
-| Remote OK | API pública | Vagas remotas |
-| Arbeitnow | API pública | Vagas, muitas na Europa |
-| The Muse | API pública | Vagas com descrição |
-| Adzuna | API com chave | Brasil e outros países; chave no `.env` |
-| Jooble | API com chave | Agregador; chave no `.env` |
-| USAJOBS | API com chave | Setor público dos EUA, opcional |
+| classificar | `JOBSCOUT_LLM_CLASSIFICAR` | sim |
+| resumir | `JOBSCOUT_LLM_RESUMIR` | sim |
+| responder | `JOBSCOUT_LLM_RESPONDER` | não |
+| preparar | `JOBSCOUT_LLM_PREPARAR` | não |
 
-LinkedIn, Indeed, Catho, Glassdoor e Gupy ficam de fora da coleta automática. O JobScout aceita colar um link desses sites (`jobscout add <url>`) para acompanhar a vaga do mesmo jeito que as buscadas. Incluir um site novo exige uma fonte com termos de uso compatíveis com consulta automatizada.
+Valor: `off`, `ollama:<modelo>` ou `gemini:<modelo>`. Tarefas privadas recusam modelo em nuvem salvo `JOBSCOUT_LLM_NUVEM_PRIVADO=sim`. Prompts usam só o perfil; toda sugestão passa por rascunho.
 
-A ordem padrão é: Remotive, Remote OK, Arbeitnow, The Muse. Adzuna e Jooble entram quando a chave correspondente existe.
+## API
 
-## Fluxo
-
-1. `jobscout analyze currículo.pdf` monta o perfil no modo local.
-2. Você ajusta chaves principais e cidade, se quiser.
-3. `jobscout search` consulta as fontes, descarta duplicata (mesmo link ou mesmo título + empresa) e grava as vagas novas.
-4. `jobscout jobs` lista o que está salvo.
-5. `jobscout open`, `visit`, `apply` e `note` atualizam o acompanhamento.
-
-Rodar `search` de novo não apaga estado. Se a vaga já existia, só a data de "vista por último na fonte" muda.
-
-## Comandos e respostas de saída
-
-A saída padrão é texto para o terminal. `--json` devolve o mesmo conteúdo em JSON, uma estrutura por comando, para script. Erro vai para a saída de erro e o processo termina com código diferente de zero.
-
-### Analisar currículo (modo local)
-
-```text
-jobscout analyze curriculo.pdf
-```
-
-```text
-Modo: local
-Arquivo: curriculo.pdf
-
-Cargo-alvo: Desenvolvedor backend
-Senioridade: pleno
-Localização: São Paulo, Brasil
-Modalidade: remoto ou híbrido
-Idiomas: português, inglês
-
-Chaves principais:
-  Python, FastAPI, PostgreSQL, Docker
-
-Chaves secundárias:
-  Redis, AWS, Git, testes automatizados
-
-Perfil salvo em %USERPROFILE%\.jobscout\profile.json
-Confirme ou edite com: jobscout profile edit
-```
-
-### Analisar com IA
-
-```text
-jobscout analyze curriculo.pdf --ai
-```
-
-```text
-Modo: ia (openai)
-Arquivo: curriculo.pdf
-
-Cargo-alvo sugerido: Engenheiro de software backend
-Senioridade sugerida: pleno
-Chaves principais sugeridas:
-  Python, FastAPI, PostgreSQL, Docker, APIs REST
-
-Aviso: sugestão da IA. Nada foi buscado ainda.
-Perfil salvo. Revise com: jobscout profile show
-```
-
-Sem chave, o comando não chama a rede:
-
-```text
-jobscout: modo ia indisponível (JOBSCOUT_AI_API_KEY ausente).
-Use o modo local: jobscout analyze curriculo.pdf
-```
-
-### Ver perfil
-
-```text
-jobscout profile show
-```
-
-```text
-Perfil ativo
-  Cargo: Desenvolvedor backend
-  Senioridade: pleno
-  Onde: São Paulo | remoto, híbrido
-  Principais: Python, FastAPI, PostgreSQL, Docker
-  Secundárias: Redis, AWS, Git
-  Atualizado: 2026-09-25 18:10
-```
-
-### Buscar vagas recentes
-
-```text
-jobscout search --since 7d
-```
-
-```text
-Busca: últimos 7 dias
-Perfil: Desenvolvedor backend
-Fontes: remotive, remoteok, arbeitnow, themuse
-
-  4 vagas novas, 1 já acompanhada, 12 ignoradas (sem chave principal)
-
-#   Pontos  Quando     Fonte      Vaga
-1   86      há 1 dia   Remotive   Backend Engineer — Northwind
-        Chaves: Python, FastAPI, PostgreSQL
-        https://remotive.com/remote-jobs/example-1
-2   74      há 3 dias  Remote OK  Python API Developer — Lumen
-        Chaves: Python, Docker
-        https://remoteok.com/remote-jobs/example-2
-3   61      há 5 dias  The Muse   Software Engineer — Campo
-        Chaves: Python, PostgreSQL
-        https://www.themuse.com/jobs/example-3
-4   55      há 6 dias  Arbeitnow  Backend Developer — Kite
-        Chaves: Docker, PostgreSQL
-        https://www.arbeitnow.com/jobs/example-4
-
-Já acompanhada (estado mantido):
-  #18  vista   Backend Python — Acme   candidatada em 2026-09-20
-
-Próximo passo: jobscout jobs   ou   jobscout open 1
-```
-
-A coluna `Pontos` vai de 0 a 100: chaves principais pesam mais, chaves secundárias e modalidade compatível somam, vaga mais antiga dentro da janela perde ponto.
-
-### Listar o que está salvo
-
-```text
-jobscout jobs --status nova,vista
-```
-
-```text
-Filtro: nova, vista    2 vagas
-
-ID   Estado  Pontos  Fonte      Vaga
-104  nova    86      Remotive   Backend Engineer — Northwind
-        Chaves: Python, FastAPI, PostgreSQL
-        Link: https://remotive.com/remote-jobs/example-1
-        Publicada: 2026-09-24    Encontrada: 2026-09-25
-105  vista   74      Remote OK  Python API Developer — Lumen
-        Chaves: Python, Docker
-        Link: https://remoteok.com/remote-jobs/example-2
-        Visitada: 2026-09-25 14:02
-```
-
-### Abrir, marcar visita e candidatura
-
-```text
-jobscout open 104
-```
-
-Abre o link no navegador e grava `vista` se o estado ainda era `nova`.
-
-```text
-Aberta no navegador.
-#104  vista   Backend Engineer — Northwind
-Link: https://remotive.com/remote-jobs/example-1
-```
-
-```text
-jobscout apply 104 --note "Enviei pelo site da empresa"
-```
-
-```text
-#104  candidatada   Backend Engineer — Northwind
-Candidatura: 2026-09-25 18:40
-Nota: Enviei pelo site da empresa
-Link: https://remotive.com/remote-jobs/example-1
-```
-
-```text
-jobscout note 104 "Pediram pretensão até sexta"
-```
-
-```text
-#104  nota adicionada
-  2026-09-25 18:40  Enviei pelo site da empresa
-  2026-09-25 19:05  Pediram pretensão até sexta
-```
-
-```text
-jobscout status 104 entrevista
-```
-
-```text
-#104  entrevista   Backend Engineer — Northwind
-```
-
-### Incluir um link manual
-
-```text
-jobscout add "https://www.linkedin.com/jobs/view/123" --title "Backend Python" --company "Acme"
-```
-
-```text
-#110  nova   Backend Python — Acme
-Fonte: manual
-Link: https://www.linkedin.com/jobs/view/123
-```
-
-### Exportar
-
-```text
-jobscout export candidaturas.csv
-```
-
-```text
-12 vagas escritas em candidaturas.csv
-```
-
-Colunas: `id`, `estado`, `titulo`, `empresa`, `fonte`, `link`, `publicada_em`, `encontrada_em`, `visitada_em`, `candidatada_em`, `pontos`, `chaves`, `notas`.
-
-### JSON
-
-```text
-jobscout jobs --status nova --json
-```
-
-```json
-{
-  "filtro": ["nova"],
-  "total": 1,
-  "vagas": [
-    {
-      "id": 104,
-      "estado": "nova",
-      "pontos": 86,
-      "titulo": "Backend Engineer",
-      "empresa": "Northwind",
-      "fonte": "remotive",
-      "link": "https://remotive.com/remote-jobs/example-1",
-      "publicada_em": "2026-09-24",
-      "encontrada_em": "2026-09-25T18:12:00-03:00",
-      "visitada_em": null,
-      "candidatada_em": null,
-      "chaves": ["Python", "FastAPI", "PostgreSQL"],
-      "notas": []
-    }
-  ]
-}
-```
-
-### Erros previstos
-
-| Situação | Código | Mensagem |
+| Método | Caminho | Uso |
 |---|---|---|
-| Currículo ilegível ou vazio | 2 | `jobscout: não consegui ler texto de curriculo.pdf` |
-| Perfil ainda não existe | 2 | `jobscout: nenhum perfil. Rode jobscout analyze <arquivo>` |
-| Id inexistente | 2 | `jobscout: vaga 999 não encontrada` |
-| Fonte sem rede | 0, com aviso | `Aviso: arbeitnow indisponível (tempo esgotado). As outras fontes seguiram.` |
-| IA pedida sem chave | 2 | `jobscout: modo ia indisponível (JOBSCOUT_AI_API_KEY ausente).` |
-| Nenhuma vaga na janela | 0 | `0 vagas novas nos últimos 14 dias com as chaves principais.` |
+| GET | `/api/estado` | Status, vagas, rascunhos pendentes, modelos, Gmail |
+| GET | `/api/stream` | Eventos ao vivo (SSE) |
+| GET | `/api/rascunhos?estado=` | Lista por estado |
+| PATCH | `/api/rascunhos/{id}` | Editar sem decidir |
+| POST | `/api/rascunhos/{id}/aprovar` | Aprovar, com `payload` opcional editado |
+| POST | `/api/rascunhos/{id}/descartar` | Descartar |
+| GET/POST | `/api/vagas` | Listar / adicionar por link |
+| GET | `/api/vagas/{id}` | Detalhe com respostas, mensagens, notas, movimentos, rascunhos |
+| PATCH | `/api/vagas/{id}/status` | Mudança manual |
+| POST | `/api/vagas/{id}/notas` | Nota |
+| GET | `/api/vagas/{id}/preparo` | Preparação de entrevista |
+| GET | `/api/movimentos`, `/api/buscar?q=`, `/api/exportar.csv` | Linha do tempo, busca, exportação |
+| GET | `/api/empresas`, `/api/empresas/{id}` | Empresas com contagens; detalhe com vagas, movimentos e rascunhos |
+| PATCH/POST | `/api/empresas/{id}`, `/api/empresas/{id}/atualizar` | Notas; buscar de novo a página pública |
+| POST | `/api/frias/verificar` | Procura vagas paradas agora |
+| GET | `/api/extensao/historico` | Respostas já dadas, para o preenchimento |
+| POST | `/api/eventos` | Entrada da extensão |
+| GET/POST | `/api/extensao/insercoes` | Respostas aprovadas para inserir |
+| GET/PUT | `/api/perfil`, GET `/api/perfil/campos` | Perfil e campos padrão |
+| POST | `/api/analisar`, `/api/emails/importar` | Currículo e `.eml` |
+| GET/POST | `/api/gmail/conectar`, `/retorno`, `/verificar`, `/desconectar` | Gmail |
 
-## O que cada vaga guarda
+Requisições com `Origin` de outro site são recusadas (403); só o próprio painel e `chrome-extension://` passam.
 
-| Campo | Origem |
-|---|---|
-| `id` | Local, numérico, estável |
-| `titulo`, `empresa`, `local` | Fonte ou o que você informou em `add` |
-| `fonte` | Nome da fonte ou `manual` |
-| `link` | URL original |
-| `descricao` | Texto da vaga, quando a fonte envia |
-| `publicada_em` | Data na fonte |
-| `encontrada_em` | Primeira vez que o JobScout viu |
-| `chaves` | Interseção com o perfil |
-| `pontos` | Pontuação da última busca |
-| `estado` | O seu, default `nova` |
-| `visitada_em` | Preenchido por `open` ou `visit` |
-| `candidatada_em` | Preenchido por `apply` |
-| `notas` | Lista de texto com data |
+## Riscos e limites
 
-## Ambiente e segredos
+- Termos do LinkedIn: só leitura e preenchimento, sem coleta em massa, envio manual.
+- Seletores quebram quando o site muda: adaptadores isolados e registro de falhas em Config.
+- LLM pode inventar: prompt restrito ao perfil, revisão obrigatória, respostas salvas.
+- Uso ético: preparação antes da entrevista, nunca durante.
 
-O arquivo `.env` existe na raiz do projeto e está no `.gitignore`. O Git não versiona chave, e o exemplo versionado é o `.env.example`.
+## Próximos passos
 
-```text
-JOBSCOUT_AI_MODE=off
-JOBSCOUT_AI_PROVIDER=
-JOBSCOUT_AI_API_KEY=
-JOBSCOUT_AI_MODEL=
-
-JOBSCOUT_ADZUNA_APP_ID=
-JOBSCOUT_ADZUNA_APP_KEY=
-JOBSCOUT_JOOBLE_API_KEY=
-
-JOBSCOUT_COUNTRY=br
-JOBSCOUT_SINCE_DAYS=14
-JOBSCOUT_DATA_DIR=
-```
-
-`JOBSCOUT_AI_MODE=off` força o modo local mesmo se alguém passar `--ai`. `JOBSCOUT_DATA_DIR` vazio usa `%USERPROFILE%\.jobscout`.
-
-## Tela inicial
-
-`python -m jobscout` abre uma tela local no navegador. Ela faz uma coisa: receber o currículo e listar as atividades principais.
-
-A bandeja aceita PDF ou DOCX, arrastado ou escolhido. A leitura é local, sem chave de IA. O texto não sai do computador. A coluna ao lado lista as ferramentas nomeadas na stack e agrupa as atividades pelo cargo encontrado na experiência e, quando existe, em projetos. Formação e resumo não entram nessa lista.
-
-Se o arquivo não tiver texto (currículo só em imagem), a tela diz que leu o arquivo e não encontrou atividades.
-
-## Fora deste documento
-
-A tela inicial e a leitura local do currículo já existem. Ainda não há busca de vagas, banco de acompanhamento nem o `jobscout.exe`. A ordem que falta:
-
-1. Confirmação do perfil (chaves, senioridade, cidade) a partir das atividades.
-2. Banco local e comandos `jobs`, `open`, `visit`, `apply`, `note`, `status`, `add`, `export`.
-3. Conectores das fontes públicas e o comando `search`.
-4. Modo `--ai` opcional, com o mesmo formato de perfil.
-5. Empacotamento `jobscout.exe`.
+1. Validar os seletores do LinkedIn e da InHire em páginas reais e ajustar os adaptadores.
+2. Gemini Nano (Prompt API) na extensão como alternativa local ao Ollama.
+3. WhatsApp: encaminhamento para bot oficial ou importação `.txt`.
+4. Empacotamento `jobscout.exe`.

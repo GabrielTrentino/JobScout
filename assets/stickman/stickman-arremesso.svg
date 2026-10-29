@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -10 88 76" width="352" height="304" overflow="visible" role="img" aria-labelledby="t">
+  <title id="t">JobScout: boneco arremessando a maleta (animado)</title>
+  <!--
+    Arquivo autônomo: abre direto no navegador e funciona em qualquer <img>.
+    Ciclo de 2,4 s: 1,4 s de arremesso + 1 s parado com a maleta já fora de cena.
+    Mesma geometria da pose "throw" do overlay (jobscout/web/index.html, #stickman).
+    A área de desenho é maior que a do overlay (-12 -10 88 76) para o balanço e o voo da maleta não serem cortados.
+  -->
+  <style>
+    .line { fill: none; stroke: #16202a; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
+    .case rect { fill: #c98a2b; stroke: #6f4c18; stroke-width: 1.6; }
+    .case path { fill: none; stroke: #6f4c18; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    @media (prefers-color-scheme: dark) { .line { stroke: #e6edf3; } }
+
+    .lean { transform-box: view-box; transform-origin: 24px 42px; animation: lean 2.4s ease-in-out infinite; }
+    .arm { transform-box: view-box; transform-origin: 22px 28px; animation: wind 2.4s cubic-bezier(0.5, 0, 0.3, 1) infinite; }
+    .held { animation: held 2.4s step-end infinite; }
+    .flying { transform-box: fill-box; transform-origin: center; opacity: 0; animation: fly 2.4s ease-out infinite; }
+
+    @keyframes lean { 0% { transform: rotate(-4deg); } 23.3% { transform: rotate(-12deg); } 36.2% { transform: rotate(10deg); } 58.3%, 100% { transform: rotate(4deg); } }
+    @keyframes wind { 0% { transform: rotate(-160deg); } 22.2% { transform: rotate(-215deg); } 33.8% { transform: rotate(-25deg); } 58.3%, 100% { transform: rotate(15deg); } }
+    @keyframes held { 0% { opacity: 1; } 33.3% { opacity: 0; } 99.9% { opacity: 0; } }
+    @keyframes fly {
+      0%, 32.7% { opacity: 0; transform: translate(-2px, -2px) rotate(-20deg); }
+      33.3% { opacity: 1; transform: translate(-2px, -2px) rotate(-20deg); }
+      46.7% { opacity: 1; transform: translate(14px, -16px) rotate(160deg); }
+      58.3%, 100% { opacity: 0; transform: translate(26px, 4px) rotate(320deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .lean, .arm, .held, .flying { animation: none; }
+      .lean { transform: rotate(8deg); }
+      .arm { transform: rotate(-20deg); }
+      .held { opacity: 0; }
+      .flying { opacity: 1; transform: translate(10px, -12px) rotate(60deg); }
+    }
+  </style>
+
+  <g class="lean">
+    <circle class="line" cx="22" cy="17" r="6"/>
+    <path class="line" d="M22 23l2 19"/>
+    <path class="line" d="M24 42l-8 17"/>
+    <path class="line" d="M24 42l9 16"/>
+    <path class="line" d="M22 28l-8 6"/>
+    <g class="arm">
+      <path class="line" d="M22 28l12 -1"/>
+      <g class="case held">
+        <rect x="33" y="23" width="13" height="9" rx="2"/>
+      </g>
+    </g>
+  </g>
+  <g class="case flying">
+    <rect x="33" y="23" width="13" height="9" rx="2"/>
+    <path d="M37.5 23v-2h4v2"/>
+  </g>
+</svg>

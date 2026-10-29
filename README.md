@@ -1,12 +1,12 @@
 # JobScout
 
-Executável que busca vagas recentes a partir do seu currículo e guarda se você visitou, se candidatou e o link de cada vaga.
+Assistente pessoal de candidaturas. Uma extensão do Chrome acompanha o LinkedIn e a InHire, um backend local guarda tudo em SQLite e um painel aberto na segunda tela mostra a linha do tempo, o Kanban e a fila de **rascunhos**.
 
-A especificação está em [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md): comandos, exemplos de saída, modo local e modo com IA, fontes e o que fica no `.env`.
+Regra central: nada capturado ou alterado automaticamente entra no histórico sem a sua aprovação. Cada vaga vista, candidatura detectada, resposta de formulário e e-mail de recrutador vira um rascunho. Você revisa, ajusta e aprova (ou descarta) na aba Rascunhos, no popup do painel, na coluna Rascunho do Kanban, na gaveta da vaga ou no popup da extensão.
 
-O `.env` fica na raiz e está listado no `.gitignore`. O modelo versionado é o `.env.example`.
+A especificação está em [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.md).
 
-## Tela inicial
+## Rodar
 
 ```text
 py -m venv .venv
@@ -14,4 +14,41 @@ py -m venv .venv
 .\.venv\Scripts\python -m jobscout
 ```
 
-A tela abre no navegador, recebe um PDF ou DOCX e lista as atividades do currículo. A leitura é local.
+O JobScout abre como **overlay**: uma bolha no canto inferior direito, sempre por cima dos outros programas (navegador, jogos em janela ou tela cheia sem borda).
+
+- **Bolha:** o círculo gira enquanto ele processa uma página; embaixo aparece quantos rascunhos estão pendentes. Cada novidade vira um pop-up pequeno em cima da bolha. Em Config você escolhe quais tipos de aviso viram pop-up.
+- **Menu:** clique na bolha para abrir Agora, Rascunhos, Linha do tempo, Kanban, Empresas, Busca, Perfil e Config, mais a chave do modo noturno, 📌 (sempre por cima), ⤢ (abrir no navegador) e × (fechar).
+- **Painel:** cada item do menu abre um painel na borda direita. ⇔ expande para cobrir mais tela (Kanban e a página da empresa já abrem expandidos). ▾ ou Esc voltam para a bolha.
+
+A aba **Agora** mostra o próximo rascunho para aprovar e um feed ao vivo do que está sendo processado, inclusive o que foi ignorado e por quê.
+
+`python -m jobscout --navegador` abre o painel no navegador, como antes. O painel completo continua em `http://127.0.0.1:8765/`. Os dados ficam em `%USERPROFILE%\.jobscout\` (`jobscout.db`, `profile.json`).
+
+Jogos em tela cheia exclusiva desenham por cima de qualquer janela; nesse caso use o modo janela ou "tela cheia sem borda".
+
+## Extensão
+
+1. Abra `chrome://extensions` (ou Edge/Brave) e ative o modo do desenvolvedor.
+2. "Carregar sem compactação" → pasta [extension/](extension/).
+3. Com o JobScout rodando, abra uma vaga no LinkedIn: um rascunho aparece no painel em menos de 2 segundos.
+
+A extensão só lê a página e preenche campos. O botão Enviar é sempre seu.
+
+## O que o JobScout tira de cada vaga
+
+Sem IA, só com regras, e tudo passa pelo rascunho:
+
+- Senioridade, contrato e setor (página pública do LinkedIn), modalidade (remoto/híbrido/presencial), inglês (obrigatório, diferencial ou vaga em inglês), salário quando a vaga cita, região (Brasil, LATAM ou internacional).
+- Skills pedidas na vaga, marcando as que aparecem no seu currículo do Perfil.
+- **Empresa:** cadastrada ao aprovar a vaga, com setor, tamanho, sede e descrição da página pública dela no LinkedIn. A página da empresa mostra as vagas (com link), o Kanban só daquela empresa, notas e a linha do tempo.
+- **Questionário:** no clique em Enviar, a extensão lê o que você preencheu em todas as etapas do formulário e manda junto. As respostas entram no rascunho e são guardadas ao aprovar. Na próxima vez que a mesma pergunta aparecer (texto curto, número, lista ou sim/não), a extensão já preenche e marca o campo com contorno verde. Perguntas abertas continuam virando rascunho de resposta, com a sugestão do histórico.
+- **Vaga fria:** vaga em aberto sem movimento há `JOBSCOUT_DIAS_FRIA` dias (14 por padrão) vira um rascunho "Marcar como fria". Aprovado, ela vai para a coluna Fria do Kanban.
+
+Se o layout do LinkedIn mudar e a extensão não achar título e empresa, o JobScout busca os dados na página pública da vaga. Vagas vistas com o JobScout fechado ficam guardadas na extensão e chegam quando ele abrir. Depois de atualizar os arquivos da extensão, clique em ↻ no card dela em `chrome://extensions` e recarregue as abas do LinkedIn.
+
+## Testes
+
+```text
+.\.venv\Scripts\python -m unittest discover -s tests
+node --test extension/tests/core.test.js
+```

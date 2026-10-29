@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256" role="img" aria-labelledby="t">
+  <title id="t">JobScout: boneco arremessando a maleta (quadro estático)</title>
+  <!--
+    Quadro-chave do arremesso, com as transformações fixas em atributos (sem CSS, sem animação).
+    Base para os ícones: abre em Figma, Illustrator, Inkscape e conversores para PNG/ICO.
+    Corpo inclinado 8°, braço logo depois de soltar, maleta no ar girada 60° com dois riscos de movimento.
+  -->
+  <g transform="rotate(8 24 42)" fill="none" stroke="#16202a" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="22" cy="17" r="6"/>
+    <path d="M22 23l2 19"/>
+    <path d="M24 42l-8 17"/>
+    <path d="M24 42l9 16"/>
+    <path d="M22 28l-8 6"/>
+    <path d="M22 28l12 -1" transform="rotate(-20 22 28)"/>
+  </g>
+  <g stroke="#6f4c18" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M37 25l5 -4M40 29l5 -4" fill="none" stroke="#16202a" stroke-width="2" opacity="0.45"/>
+    <g transform="translate(10 -12) rotate(60 39.5 27.5)">
+      <rect x="33" y="23" width="13" height="9" rx="2" fill="#c98a2b"/>
+      <path d="M37.5 23v-2h4v2" fill="none"/>
+    </g>
+  </g>
+</svg>
