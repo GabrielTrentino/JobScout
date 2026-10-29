@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 528 456" width="528" height="456">
+  <title>JobScout: guia da pose sentado pensando (quadro 0)</title>
+  <!--
+    Guia para animar a pose "pensando" na mesma ferramenta do arremesso.
+    Parte da pose sentado: maleta, tronco e pernas no mesmo lugar; muda só o braço direito (mão no queixo),
+    a cabeça um pouco inclinada e os três pontos de pensamento.
+    O retângulo tracejado é a área que aparece inteira na bolha; o círculo é o fundo dela.
+    Apague a camada "guias" antes de exportar.
+  -->
+  <g id="guias" fill="none" stroke="#7aa2c8" stroke-width="2" stroke-dasharray="8 8">
+    <rect x="24" y="60" width="384" height="384"/>
+    <circle cx="216" cy="252" r="206"/>
+    <path d="M0 412h528"/>
+  </g>
+  <ellipse cx="216" cy="416" rx="90" ry="8" fill="rgb(22,32,42)" fill-opacity="0.12"/>
+  <g id="maleta" stroke="rgb(111,76,24)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="144" y="328" width="144" height="84" rx="15" fill="rgb(201,138,43)"/>
+    <path d="M144 364h144" fill="none"/>
+  </g>
+  <g id="boneco" fill="none" stroke="rgb(22,32,42)" stroke-width="20.4" stroke-linecap="round" stroke-linejoin="round">
+    <circle id="cabeca" cx="222" cy="190" r="36"/>
+    <path id="tronco" d="M216 226v96"/>
+    <path id="braco-direito" d="M216 250l54 50 -30 -70"/>
+    <path id="braco-esquerdo" d="M216 250l42 54"/>
+    <path id="perna-direita" d="M216 322h78l18 84"/>
+    <path id="perna-esquerda" d="M216 322h60l30 84"/>
+  </g>
+  <g id="pontos" fill="rgb(22,32,42)">
+    <circle cx="282" cy="140" r="9"/>
+    <circle cx="314" cy="112" r="12"/>
+    <circle cx="352" cy="84" r="15"/>
+  </g>
+</svg>
