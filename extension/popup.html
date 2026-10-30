@@ -23,6 +23,15 @@
     details { padding: 0.6rem 0.8rem; border-top: 1px solid var(--rule); }
     label { display: block; margin-top: 0.4rem; }
     input[type=url] { width: 100%; box-sizing: border-box; }
+    .forms { padding: 0.6rem 0.8rem; border-top: 1px solid var(--rule); }
+    .forms h2 { margin: 0 0 0.3rem; font: 600 0.85rem "Arial Narrow", sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cabinet); }
+    .flag { display: flex; gap: 0.4rem; align-items: flex-start; margin-top: 0.35rem; }
+    .flag input { margin-top: 0.2rem; }
+    .small { font-size: 0.8rem; padding: 0; }
+    .forms .muted { padding: 0; }
+    .sites { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+    .sites li { display: flex; justify-content: space-between; align-items: center; padding: 0.15rem 0; border: 0; font-size: 0.85rem; }
+    .sites button { padding: 0 0.4rem; }
   </style>
 </head>
 <body>
@@ -32,10 +41,19 @@
   </header>
   <p class="muted" id="status">Conectando…</p>
   <ol id="list"></ol>
+  <section class="forms">
+    <h2>Formulários de candidatura</h2>
+    <p class="muted small" id="forms-here">…</p>
+    <label class="flag"><input type="checkbox" id="forms-site"> <span>Ajudar a preencher <strong id="forms-host">neste site</strong></span></label>
+    <label class="flag"><input type="checkbox" id="forms-all"> <span>Em todos os sites de vagas<br><span class="muted small">Só em páginas que parecem candidatura (vaga, currículo, LinkedIn…). Login, compra e contato ficam de fora.</span></span></label>
+    <ul class="sites" id="forms-sites"></ul>
+    <p class="err" id="forms-error"></p>
+  </section>
   <details>
     <summary>Ajustes</summary>
     <label>Endereço do JobScout <input type="url" id="backend"></label>
     <label><input type="checkbox" id="autofill"> Preencher campos padrão (nome, e-mail, telefone…)</label>
+    <label><input type="checkbox" id="suggestions"> Sugerir respostas ao lado das perguntas (você clica em Usar)</label>
     <p class="muted">Respostas abertas sempre passam pelo rascunho. O botão Enviar é sempre seu.</p>
   </details>
   <script src="popup.js"></script>

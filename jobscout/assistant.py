@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
+import json
 import re
 import threading
 from datetime import datetime
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from jobscout import insights, linkedin_public, llm
+from jobscout import ai_suggest, approach, cv, insights, linkedin_public, llm, pipeline, places, replies, suggest
 from jobscout.activities import clean_space, fold, list_tools
 from jobscout.events import Hub
 from jobscout.profile import Profile, as_prompt
 from jobscout.store import ALL_JOB_FIELDS, EXTRA_FIELDS, JOB_FIELDS, STATUS_KEYS, STATUS_LABELS, Store, now
 
-SITE_NAMES = {"linkedin": "LinkedIn", "inhire": "InHire", "email": "E-mail", "manual": "Manual", "painel": "Painel"}
+SITE_NAMES = {"linkedin": "LinkedIn", "inhire": "InHire", "email": "E-mail", "manual": "Manual", "painel": "Painel",
+              "whatsapp": "WhatsApp", "gupy": "Gupy", "busca": "Busca automática", "web": "Outro site"}
+WORK_MODE_NAMES = {"remoto": "Remoto", "hibrido": "Híbrido", "presencial": "Presencial"}
 
 KINDS = {
     "vaga": "Nova vaga",
@@ -24,11 +27,17 @@ KINDS = {
     "mensagem": "Mensagem de recrutador",
 }
 
-SOURCES = {"linkedin", "inhire", "email", "manual", "painel"}
+SOURCES = {"linkedin", "inhire", "email", "manual", "painel", "whatsapp", "busca", "web"}
 
 # Status em que a vaga ainda espera retorno; parada por muito tempo vira candidata a "fria".
 OPEN_STATUSES = ("candidatado", "em_analise", "entrevista", "proposta")
+# Indicadores: qualquer resposta da empresa (até recusa) é retorno.
+APPLIED_STAGES = ("candidatado", "em_analise", "entrevista", "proposta", "recusada", "fria")
+RETURN_STAGES = {"em_analise", "entrevista", "proposta", "recusada"}
 MAX_ANSWERS = 80
+MAX_SUGGESTIONS = 60
+MAX_AI_FIELDS = 12
+LANGUAGE_NAMES = {"pt": "português", "en": "inglês", "es": "espanhol"}
 
 MAX_DESCRIPTION = 20000
 
@@ -118,6 +127,8 @@ class Assistant:
         self.public_job = public_job
         self.public_company = public_company
         self._public_cache: dict[str, dict[str, str]] = {}
+        # Modelos de mensagem editados pela pessoa (o App liga às preferências).
+        self._message_overrides_loader = None
         self._public_lock = threading.Lock()
 
     # Entrada: eventos da extensão
@@ -153,7 +164,9 @@ class Assistant:
             changed = [self._job_viewed(job, source)]
         elif kind == "application_submitted":
             self.hub.activity(f"{site_name}: clique em Enviar detectado em {label}.", "trabalhando", acao="envio")
-            changed = [self._application_submitted(job, source, event.get("quando"), _form_answers(event.get("respostas")))]
+            changed = [self._application_submitted(
+                job, source, event.get("quando"), _form_answers(event.get("respostas")), _documents(event.get("documentos")),
+            )]
         elif kind == "form_detected":
             count = len(event.get("perguntas") or [])
             self.hub.activity(f"{site_name}: formulário com {count} pergunta(s) aberta(s) em {label}.", "trabalhando")
@@ -248,10 +261,13 @@ class Assistant:
         return self._new_draft("vaga", key, source, payload, job_url=job["url"])
 
     def _application_submitted(
-        self, job: dict[str, str], source: str, when: Any, answers: list[dict[str, str]] | None = None
+        self, job: dict[str, str], source: str, when: Any, answers: list[dict[str, str]] | None = None,
+        documents: list[str] | None = None,
     ) -> dict[str, Any] | None:
         applied_at = str(when) if when else now()
-        extra = {"respostas": answers, "guardar_respostas": True} if answers else {}
+        extra: dict[str, Any] = {"respostas": answers, "guardar_respostas": True} if answers else {}
+        if documents:
+            extra["documentos"] = documents
         existing = self.store.job_by_url(job["url"])
         if existing:
             if STATUS_KEYS.index(existing["status"]) >= STATUS_KEYS.index("candidatado"):
@@ -360,7 +376,7 @@ class Assistant:
 
     def _from_history(self, question: str) -> dict[str, str] | None:
         best, score = None, 0.0
-        for answer in self.store.answers():
+        for answer in self._reusable_answers():
             value = similarity(question, answer["question"])
             if value > score:
                 best, score = answer, value
@@ -369,10 +385,14 @@ class Assistant:
         return {"resposta": best["answer"], "base": f"Já usada em {best['title']} — {best['company']}"}
 
     def _suggest_answer(self, draft_id: int, job: dict[str, str], question: str) -> None:
+        past = ai_suggest.examples([question], self._reusable_answers(), similarity)
+        history = "".join(f"- {item['pergunta']} → {item['resposta']}\n" for item in past)
         prompt = (
             f"Perfil:\n{as_prompt(self.profile.load())}\n\n"
-            f"Vaga: {_job_label(job)}\n{job.get('description', '')[:4000]}\n\n"
-            f"Pergunta do formulário: {question}\n\nEscreva a resposta."
+            + (f"Como a pessoa respondeu perguntas parecidas antes (siga o mesmo jeito e os mesmos fatos):\n{history}\n" if history else "")
+            + f"Vaga: {_job_label(job)}\n{job.get('description', '')[:4000]}\n\n"
+            f"Pergunta do formulário: {question}\n\n"
+            f"Escreva a resposta em {LANGUAGE_NAMES[places.language(question)]}, o idioma da pergunta."
         )
         self.hub.activity(f"IA escrevendo sugestão para “{question[:80]}”…", "trabalhando")
         try:
@@ -539,7 +559,18 @@ class Assistant:
         self.store.attach_drafts_to_job(fields["url"], job_id)
         self.store.log("vaga_criada", f"Vaga salva: {_job_label(fields)}", draft["source"], job_id=job_id, draft_id=draft["id"])
         self._save_form_answers(job_id, payload, draft["source"], draft["id"])
+        self._save_sent(job_id, payload)
         self.ensure_company(job_id)
+        recruiter = payload.get("recrutador") if isinstance(payload.get("recrutador"), dict) else None
+        if recruiter and recruiter.get("nome"):
+            # Vaga oferecida no chat: quem abordou fica vinculado a ela.
+            contact = self.find_contact(recruiter.get("nome", ""), recruiter.get("email", ""), recruiter.get("linkedin", ""), recruiter.get("telefone", ""))
+            if contact is None:
+                contact_id = self.store.create_contact(self._contact_fields({**recruiter, "empresa": fields["company"]}))
+            else:
+                contact_id = contact["id"]
+            self.store.link_contact(job_id, contact_id)
+            self.store.log("recrutador", f"Abordagem de {recruiter['nome']} vinculada", draft["source"], job_id=job_id, draft_id=draft["id"])
         if status != "visualizada":
             self.store.log(
                 "status", f"Status: {STATUS_LABELS[status]}", draft["source"],
@@ -570,13 +601,27 @@ class Assistant:
             job_id=job_id, draft_id=draft["id"], detail={"de": job["status"], "para": status},
         )
         self._save_form_answers(job_id, payload, draft["source"], draft["id"])
+        self._save_sent(job_id, payload)
         return job_id
 
+    def _save_sent(self, job_id: int, payload: dict[str, Any]) -> None:
+        """Currículo enviado e salário informado ficam na candidatura, para filtrar e comparar depois."""
+        documents = ", ".join(_documents(payload.get("documentos")))
+        salary = next(
+            (item["valor"] for item in payload.get("respostas") or [] if suggest.SALARY.search(fold(item["rotulo"]))), ""
+        )
+        if documents or salary:
+            self.store.set_sent(job_id, documents, salary[:200])
+
     def _save_form_answers(self, job_id: int, payload: dict[str, Any], source: str, draft_id: int) -> None:
-        """Guarda o que foi preenchido no formulário no momento do envio (se o usuário não desmarcou)."""
+        """Registra o que foi preenchido no formulário no momento do envio.
+
+        Sempre fica no histórico da vaga; "guardar_respostas" desmarcado só impede o reuso no preenchimento.
+        """
         answers = payload.get("respostas") or []
-        if not answers or payload.get("guardar_respostas") is False:
+        if not answers:
             return
+        origin = "registro" if payload.get("guardar_respostas") is False else "formulario"
         known = {(fold(a["question"]), fold(a["answer"])) for a in self.store.answers(job_id)}
         saved = 0
         for item in answers:
@@ -584,7 +629,7 @@ class Assistant:
             if pair in known:
                 continue
             known.add(pair)
-            self.store.add_answer(job_id, item["rotulo"], item["valor"], False, "formulario")
+            self.store.add_answer(job_id, item["rotulo"], item["valor"], False, origin)
             saved += 1
         if saved:
             self.store.log(
@@ -618,6 +663,9 @@ class Assistant:
         contact_id = self.store.upsert_contact(
             payload.get("remetente_nome", ""), payload.get("remetente_email", ""), job["company"]
         )
+        if contact_id:
+            # Quem escreveu sobre a vaga fica vinculado a ela (aparece em Recrutadores e no chat).
+            self.store.link_contact(job["id"], contact_id)
         self.store.add_message({
             "application_id": job["application_id"],
             "contact_id": contact_id,
@@ -677,6 +725,7 @@ class Assistant:
                 "status", f"Status: {STATUS_LABELS.get(job['status'], '—')} → {STATUS_LABELS[status]}", "painel",
                 job_id=job_id, detail={"de": job["status"], "para": status},
             )
+            self._stage_from_status(job_id, status)
         self.hub.publish("vaga", id=job_id)
         return self.store.job(job_id)
 
@@ -779,11 +828,156 @@ class Assistant:
         self.store.set_company_notes(company_id, notes.strip()[:5000])
         return self.store.company(company_id)
 
+    # Sugestões para os campos de um formulário aberto (a extensão mostra; a pessoa clica para usar)
+
+    def suggestions(self, fields: list[Any]) -> list[dict[str, str]]:
+        profile = self.profile.load()
+        result = []
+        for item in fields[:MAX_SUGGESTIONS]:
+            if not isinstance(item, dict):
+                continue
+            label = clean_space(str(item.get("rotulo") or ""))[:500]
+            field = str(item.get("campo") or "")
+            options = [clean_space(str(option))[:200] for option in item.get("opcoes") or []][:50]
+            kind = str(item.get("tipo") or "text")
+            if not label or not field:
+                continue
+            if kind == "text" and not options and suggest.numeric_question(label):
+                kind = "number"
+            limit = item.get("max") if isinstance(item.get("max"), (int, float)) else 0
+            found = suggest.suggest(label, profile, options=options, kind=kind) or self._history_suggestion(label, options)
+            if found and suggest.fits(found["valor"], kind, int(limit or 0)):
+                result.append({"campo": field, **found})
+        return result
+
+    def ai_suggestions(self, fields: list[Any], job: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Campos que as regras não souberam responder vão para a IA, de uma vez."""
+        model = llm.model_name("responder")
+        if not model:
+            return {"ia": False, "sugestoes": []}
+        clean = []
+        for item in fields[:MAX_AI_FIELDS]:
+            if not isinstance(item, dict):
+                continue
+            label = clean_space(str(item.get("rotulo") or ""))[:500]
+            if not label or not item.get("campo") or suggest.profile_only(label):
+                continue
+            kind = str(item.get("tipo") or "text")
+            options = [clean_space(str(option))[:200] for option in item.get("opcoes") or []][:30]
+            if kind == "text" and not options and suggest.numeric_question(label):
+                kind = "number"
+            limit = item.get("max")
+            clean.append({
+                "campo": str(item["campo"]),
+                "rotulo": label,
+                "tipo": kind,
+                "opcoes": options,
+                "max": int(limit) if isinstance(limit, (int, float)) and limit > 0 else 0,
+            })
+        if not clean:
+            return {"ia": True, "sugestoes": []}
+        past = ai_suggest.examples([field["rotulo"] for field in clean], self._reusable_answers(), similarity)
+        job_fields = None
+        if isinstance(job, dict):
+            try:
+                known = self.store.job_by_url(normalize_url(str(job.get("url") or "")))
+            except DraftError:
+                known = None
+            job_fields = known or {key: str(job.get(key) or "") for key in ("title", "company", "description")}
+        self.hub.activity(f"IA pensando em {len(clean)} pergunta(s) do formulário…", "trabalhando")
+        try:
+            raw = llm.ask_llm("responder", ai_suggest.prompt(clean, as_prompt(self.profile.load()), past, job_fields),
+                              system=ai_suggest.SYSTEM, as_json=True, timeout=180 if any(field["tipo"] == "textarea" for field in clean) else 120)
+        except llm.LLMUnavailable as exc:
+            self.hub.activity(f"IA indisponível para o formulário. {exc}", "aviso")
+            return {"ia": True, "sugestoes": [], "erro": str(exc)}
+        found = ai_suggest.parse(raw, clean, model)
+        self.hub.activity(f"IA sugeriu {len(found)} de {len(clean)} resposta(s). Confira antes de usar.", "ok" if found else "info")
+        return {"ia": True, "sugestoes": found}
+
+    def _history_suggestion(self, label: str, options: list[str]) -> dict[str, str] | None:
+        if suggest.SENSITIVE.search(fold(label)):
+            return None
+        remembered = self._from_history(label)
+        if not remembered:
+            return None
+        value = remembered["resposta"]
+        if options:
+            index = suggest.fit_text(value, options)
+            if index < 0:
+                yes_no = suggest.yes_no(value)
+                index = suggest.fit_yes_no(yes_no, options) if yes_no is not None else -1
+            if index < 0:
+                return None
+            value = options[index]
+        return {"valor": value, "origem": "historico", "base": remembered["base"]}
+
+    # Backlog de melhoria do currículo: "Ponto de melhoria" na sugestão manda a pergunta para cá
+
+    def add_improvement(self, data: dict[str, Any]) -> dict[str, Any]:
+        question = clean_space(str(data.get("pergunta") or ""))[:500]
+        if not question:
+            raise ValueError("Pergunta vazia.")
+        job = data.get("vaga") if isinstance(data.get("vaga"), dict) else {}
+        improvement_id = self.store.add_improvement({
+            "question": question,
+            "options": [clean_space(str(option))[:200] for option in data.get("opcoes") or []][:30],
+            "kind": str(data.get("tipo") or "text")[:20],
+            "suggestion": clean_space(str(data.get("sugestao") or ""))[:500],
+            "basis": clean_space(str(data.get("base") or ""))[:300],
+            "origin": str(data.get("origem") or "")[:20],
+            "job": _job_label(job) if job else "",
+            "job_url": str(job.get("url") or "")[:500],
+        })
+        self.hub.activity(f"Ponto de melhoria anotado: “{question[:80]}”. Veja em Currículo.", "info")
+        self.hub.publish("melhorias")
+        return self.store.improvement(improvement_id)
+
+    def reprocess_improvement(self, improvement_id: int) -> dict[str, Any]:
+        """Responde de novo com o currículo de agora: regras e, se ligada, a IA."""
+        item = self.store.improvement(improvement_id)
+        if item is None:
+            raise LookupError(f"Ponto {improvement_id} não encontrado.")
+        profile = self.profile.load()
+        rule = suggest.suggest(item["question"], profile, options=item["options"], kind=item["kind"])
+        field = {"campo": "melhoria", "rotulo": item["question"], "tipo": item["kind"], "opcoes": item["options"]}
+        ai = self.ai_suggestions([field]) if not rule else {"ia": bool(llm.model_name("responder")), "sugestoes": []}
+        found = rule or (ai["sugestoes"][0] if ai.get("sugestoes") else None)
+        latest = {
+            "em": now(),
+            "valor": found["valor"] if found else "",
+            "base": found["base"] if found else "Nem as regras nem a IA acharam resposta com o currículo atual.",
+            "origem": found["origem"] if found else "",
+            "mudou": bool(found) and found["valor"] != item["suggestion"],
+        }
+        self.store.update_improvement(improvement_id, latest=latest)
+        self.hub.publish("melhorias")
+        return self.store.improvement(improvement_id)
+
+    def set_improvement(self, improvement_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        if self.store.improvement(improvement_id) is None:
+            raise LookupError(f"Ponto {improvement_id} não encontrado.")
+        fields: dict[str, Any] = {}
+        if "estado" in data:
+            state = str(data["estado"])
+            if state not in {"aberto", "resolvido", "descartado"}:
+                raise ValueError("Estado inválido.")
+            fields["state"] = state
+        if "nota" in data:
+            fields["note"] = clean_space(str(data["nota"] or ""))[:1000]
+        self.store.update_improvement(improvement_id, **fields)
+        self.hub.publish("melhorias")
+        return self.store.improvement(improvement_id)
+
     # Respostas já dadas: base do preenchimento automático
+
+    def _reusable_answers(self) -> list[dict[str, Any]]:
+        """Respostas que podem preencher outros formulários (as de "só registro" ficam de fora)."""
+        return [answer for answer in self.store.answers() if answer.get("origin") != "registro"]
 
     def answer_history(self) -> list[dict[str, str]]:
         latest: dict[str, dict[str, str]] = {}
-        for answer in self.store.answers():
+        for answer in self._reusable_answers():
             key = fold(answer["question"])
             if key and key not in latest and answer["answer"].strip():
                 latest[key] = {
@@ -842,9 +1036,429 @@ class Assistant:
 
     # Consulta
 
+    # Recrutadores
+
+    def _contact_fields(self, data: dict[str, Any]) -> dict[str, str]:
+        mapping = {"nome": "name", "email": "email", "telefone": "phone", "empresa": "company", "cargo": "role", "linkedin": "linkedin", "notas": "notes"}
+        fields = {column: clean_space(str(data[key]))[:500] for key, column in mapping.items() if key in data}
+        if "email" in fields and fields["email"] and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", fields["email"]):
+            raise ValueError("E-mail inválido.")
+        return fields
+
+    def create_contact(self, data: dict[str, Any], job_id: int | None = None) -> dict[str, Any]:
+        fields = self._contact_fields(data)
+        if not fields.get("name") and not fields.get("email") and not fields.get("linkedin"):
+            raise ValueError("Informe pelo menos o nome, o e-mail ou o LinkedIn da pessoa.")
+        contact_id = self.store.create_contact(fields)
+        if job_id:
+            self.link_contact(job_id, contact_id)
+        self.hub.publish("recrutadores")
+        return self.contact_detail(contact_id)
+
+    def update_contact(self, contact_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        if self.store.contact(contact_id) is None:
+            raise LookupError(f"Recrutador {contact_id} não encontrado.")
+        self.store.update_contact(contact_id, self._contact_fields(data))
+        self.hub.publish("recrutadores")
+        return self.contact_detail(contact_id)
+
+    def link_contact(self, job_id: int, contact_id: int) -> None:
+        job = self._job(job_id)
+        contact = self.store.contact(contact_id)
+        if contact is None:
+            raise LookupError(f"Recrutador {contact_id} não encontrado.")
+        self.store.link_contact(job_id, contact_id)
+        if not contact["company"] and job["company"]:
+            self.store.update_contact(contact_id, {"company": job["company"]})
+        self.store.log("recrutador", f"{contact['name'] or contact['email']} vinculado(a) à vaga", "painel", job_id=job_id)
+        self.hub.publish("recrutadores")
+
+    def unlink_contact(self, job_id: int, contact_id: int) -> None:
+        self.store.unlink_contact(job_id, contact_id)
+        self.hub.publish("recrutadores")
+
+    def contact_detail(self, contact_id: int) -> dict[str, Any]:
+        contact = self.store.contact(contact_id)
+        if contact is None:
+            raise LookupError(f"Recrutador {contact_id} não encontrado.")
+        return {**contact, "vagas": [_job_brief(job) for job in self.store.contact_jobs(contact_id)]}
+
+    def find_contact(self, name: str = "", email: str = "", linkedin: str = "", phone: str = "") -> dict[str, Any] | None:
+        """Quem está na conversa: pelo e-mail, LinkedIn ou telefone; senão pelo nome (inteiro, sem acento)."""
+        contacts = self.store.contacts()
+        digits = re.sub(r"\D", "", phone)
+        for contact in contacts:
+            if email and (contact["email"] or "").lower() == email.lower():
+                return contact
+            if linkedin and contact["linkedin"] and _linkedin_slug(contact["linkedin"]) == _linkedin_slug(linkedin):
+                return contact
+            if len(digits) >= 8 and re.sub(r"\D", "", contact["phone"] or "").endswith(digits[-8:]):
+                return contact
+        wanted = fold(clean_space(name))
+        if wanted:
+            for contact in contacts:
+                if fold(contact["name"] or "") == wanted:
+                    return contact
+        return None
+
+    def chat_context(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Para a barra do chat: quem é a pessoa, as vagas dela e a vaga mais provável da conversa."""
+        name = clean_space(str(data.get("nome") or ""))[:120]
+        contact = self.find_contact(name, str(data.get("email") or ""), str(data.get("linkedin") or ""), str(data.get("telefone") or ""))
+        jobs = self.store.contact_jobs(contact["id"]) if contact else []
+        # A empresa citada na conversa vale mais que o vínculo: a mesma pessoa pode estar falando de outra vaga.
+        guess = replies.match_job([str(data.get("texto") or "")], self.store.jobs()) or (jobs[0] if jobs else None)
+        return {
+            "recrutador": {**contact, "vagas": [_job_brief(job) for job in jobs]} if contact else None,
+            "vaga_sugerida": _job_brief(guess) if guess else None,
+            "vagas": [_job_brief(job) for job in self.store.jobs() if job["title"] or job["company"]][:80],
+            "intencoes": [intent for intent in self.message_library() if intent["ativo"]],
+        }
+
+    def chat_approach(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Recrutador oferecendo vaga no chat: se ainda não está salva, vira rascunho de vaga para aprovar."""
+        turns = replies.conversation(data.get("conversa"))
+        channel = "whatsapp" if data.get("canal") == "whatsapp" else "linkedin"
+        texts = [turn["texto"] for turn in turns if not turn["minha"]]
+        known = replies.match_job(texts, self.store.jobs())
+        if known:
+            return {"estado": "salva", "vaga": _job_brief(known)}
+        found = approach.detect(turns)
+        if not found:
+            return {"estado": "nada"}
+        name = clean_space(str(data.get("nome") or ""))[:120]
+        if found["link"]:
+            try:
+                url = normalize_url(found["link"])
+            except DraftError:
+                url = ""
+        else:
+            url = ""
+        if not url:
+            # Sem link da vaga: um endereço próprio do JobScout identifica a abordagem (não abre nada).
+            slug = re.sub(r"[^a-z0-9]+", "-", fold(f"{name or data.get('telefone') or 'contato'} {found['empresa'] or found['titulo']}")).strip("-")
+            url = f"https://jobscout.local/abordagem/{channel}/{slug[:80]}"
+        existing = self.store.job_by_url(url)
+        if existing:
+            return {"estado": "salva", "vaga": _job_brief(existing)}
+        key = "vaga:" + url
+        if self.store.pending_draft(key):
+            return {"estado": "rascunho", "vaga": {"titulo": found["titulo"], "empresa": found["empresa"]}}
+        if self.store.was_discarded(key):
+            return {"estado": "descartada"}
+        excerpt = replies.transcript(turns, name)[-4000:]
+        payload = {
+            "source": channel, "url": url, "title": found["titulo"], "company": found["empresa"],
+            "location": found["local"], "description": f"Abordagem pelo {SITE_NAMES[channel]}:\n\n{excerpt}",
+            "work_mode": WORK_MODE_NAMES.get(found["modelo"], ""), "status": "visualizada", "candidatado_em": None,
+            "recrutador": {
+                "nome": name, "email": clean_space(str(data.get("email") or "")),
+                "linkedin": clean_space(str(data.get("linkedin") or "")), "telefone": clean_space(str(data.get("telefone") or "")),
+            },
+            "abordagem": True,
+        }
+        for field in EXTRA_FIELDS:
+            payload.setdefault(field, "")
+        draft = self._new_draft("vaga", key, channel, payload, job_url=url)
+        self.hub.publish("rascunhos", ids=[draft["id"]])
+        who = name or "Um recrutador"
+        self.hub.activity(f"{who} ofereceu {_job_label(payload)} no {SITE_NAMES[channel]}. Aprove para virar oportunidade.", "aviso", rascunho=draft["id"])
+        return {"estado": "novo", "rascunho": draft["id"], "vaga": {"titulo": found["titulo"], "empresa": found["empresa"]}, "origem": found["origem"]}
+
+    # Etapas do processo (quadro da empresa)
+
+    def _company_of(self, job: dict[str, Any]) -> dict[str, Any] | None:
+        return self.store.company_by_key(company_key(job["company"])) if job.get("company") else None
+
+    def stages(self, job_id: int) -> list[dict[str, Any]]:
+        """Etapas da vaga; na primeira vez, saem do quadro da empresa (ou do padrão) e do status atual."""
+        job = self._job(job_id)
+        stages = self.store.job_stages(job_id)
+        if not stages:
+            initial = pipeline.initial_stages(pipeline.company_pipeline(self._company_of(job)), job["status"])
+            self.store.replace_job_stages(job_id, initial)
+            stages = self.store.job_stages(job_id)
+        return stages
+
+    def stages_view(self, job_id: int) -> dict[str, Any]:
+        job = self._job(job_id)
+        company = self._company_of(job)
+        return {
+            "etapas": self.stages(job_id),
+            "tipos": pipeline.KINDS,
+            "sugestoes": [{"nome": name, "tipo": kind} for name, kind in pipeline.SUGGESTIONS],
+            "empresa": {"id": company["id"], "nome": company["name"], "quadro": pipeline.company_pipeline(company),
+                        "personalizado": bool(company.get("pipeline"))} if company else None,
+        }
+
+    def save_stages(self, job_id: int, raw: Any, source: str = "painel") -> dict[str, Any]:
+        job = self._job(job_id)
+        stages = pipeline.clean_stages(raw)
+        if not stages:
+            raise DraftError("Deixe pelo menos uma etapa.")
+        with self.store.tx():
+            self.store.replace_job_stages(job_id, stages)
+            self.store.log("etapas", "Etapas do processo atualizadas", source, job_id=job_id)
+            self._status_from_stage(job, pipeline.current(stages), source)
+        self.hub.publish("vaga", id=job_id)
+        return self.stages_view(job_id)
+
+    def move_to_stage(self, job_id: int, target: Any, source: str = "painel") -> dict[str, Any]:
+        """Leva a vaga para a etapa (pelo índice ou pelo nome); o status geral acompanha o tipo da etapa."""
+        job = self._job(job_id)
+        stages = self.stages(job_id)
+        if isinstance(target, int) or str(target).isdigit():
+            index = int(target)
+        else:
+            index = next((i for i, stage in enumerate(stages) if fold(stage["name"]) == fold(str(target))), -1)
+            if index < 0:
+                # Quadro da empresa tem uma etapa que esta vaga ainda não tinha: entra na posição do quadro.
+                board = pipeline.company_pipeline(self._company_of(job))
+                wanted = next((stage for stage in board if fold(stage["name"]) == fold(str(target))), None)
+                if wanted is None:
+                    raise DraftError(f"Etapa “{target}” não existe nesta vaga.")
+                order = [fold(stage["name"]) for stage in board]
+                position = sum(1 for stage in stages if fold(stage["name"]) in order[:order.index(fold(wanted["name"]))])
+                stages.insert(position, {**wanted, "state": "pendente", "scheduled_at": None, "notes": "", "done_at": None})
+                index = position
+        moved = pipeline.advance(stages, index, now())
+        with self.store.tx():
+            self.store.replace_job_stages(job_id, moved)
+            self.store.log("etapa", f"Etapa: {moved[index]['name']}", source, job_id=job_id, detail={"etapa": moved[index]["name"]})
+            self._status_from_stage(job, moved[index], source)
+        self.hub.publish("vaga", id=job_id)
+        return self.stages_view(job_id)
+
+    def _status_from_stage(self, job: dict[str, Any], stage: dict[str, Any] | None, source: str) -> None:
+        if not stage or stage["kind"] == job["status"] or job["status"] in {"recusada", "fria"}:
+            return
+        self.store.set_status(job["id"], stage["kind"], now() if stage["kind"] == "candidatado" else None)
+        self.store.log(
+            "status", f"Status: {STATUS_LABELS.get(job['status'], '—')} → {STATUS_LABELS[stage['kind']]}", source,
+            job_id=job["id"], detail={"de": job["status"], "para": stage["kind"], "etapa": stage["name"]},
+        )
+
+    def _stage_from_status(self, job_id: int, status: str) -> None:
+        """Mudou o status pelo quadro geral: a etapa atual vai para a próxima do mesmo tipo."""
+        stages = self.store.job_stages(job_id)
+        if not stages or status not in pipeline.KINDS:
+            return
+        here = next((i for i, stage in enumerate(stages) if stage["state"] == "atual"), -1)
+        if here >= 0 and stages[here]["kind"] == status:
+            return
+        ahead = [i for i, stage in enumerate(stages) if stage["kind"] == status and i > here]
+        anywhere = [i for i, stage in enumerate(stages) if stage["kind"] == status]
+        target = (ahead or anywhere or [None])[0]
+        if target is not None:
+            self.store.replace_job_stages(job_id, pipeline.advance(stages, target, now()))
+
+    def save_company_pipeline(self, company_id: int, raw: Any, apply_to_jobs: bool = False) -> dict[str, Any]:
+        company = self.store.company(company_id)
+        if company is None:
+            raise LookupError(f"Empresa {company_id} não encontrada.")
+        board = pipeline.clean_pipeline(raw)
+        if not board:
+            raise DraftError("O quadro precisa de pelo menos uma etapa.")
+        default = [dict(stage) for stage in pipeline.DEFAULT_PIPELINE]
+        self.store.set_company_pipeline(company_id, [] if board == default else board)
+        self.store.log("quadro_empresa", f"Quadro da {company['name']}: " + " → ".join(stage["name"] for stage in board), "painel")
+        changed = 0
+        if apply_to_jobs:
+            for job in self.store.jobs():
+                if job["company"] and company_key(job["company"]) == company["key"]:
+                    self._rebuild_stages(job, board)
+                    changed += 1
+        self.hub.publish("empresas")
+        return {**self.company_board(company_id), "vagas_atualizadas": changed}
+
+    def _rebuild_stages(self, job: dict[str, Any], board: list[dict[str, str]]) -> None:
+        """Novo quadro numa vaga em andamento: mantém estado, data e notas das etapas de mesmo nome."""
+        old = {fold(stage["name"]): stage for stage in self.store.job_stages(job["id"])}
+        if not old:
+            self.store.replace_job_stages(job["id"], pipeline.initial_stages(board, job["status"]))
+            return
+        rebuilt = []
+        for stage in board:
+            before = old.get(fold(stage["name"]))
+            rebuilt.append({**stage, **({k: before[k] for k in ("state", "scheduled_at", "notes", "done_at")} if before else
+                                        {"state": "pendente", "scheduled_at": None, "notes": "", "done_at": None})})
+        if not any(stage["state"] == "atual" for stage in rebuilt):
+            rebuilt = pipeline.initial_stages(board, job["status"]) if not any(s["state"] == "feita" for s in rebuilt) else rebuilt
+        self.store.replace_job_stages(job["id"], rebuilt)
+
+    def company_board(self, company_id: int) -> dict[str, Any]:
+        """Kanban da empresa: colunas = etapas do quadro dela; cada vaga na etapa atual."""
+        company = self.store.company(company_id)
+        if company is None:
+            raise LookupError(f"Empresa {company_id} não encontrada.")
+        board = pipeline.company_pipeline(company)
+        names = [fold(stage["name"]) for stage in board]
+        cards = []
+        for job in self.store.jobs():
+            if not job["company"] or company_key(job["company"]) != company["key"]:
+                continue
+            stages = self.stages(job["id"])
+            here = pipeline.current(stages)
+            column = fold(here["name"]) if here else ""
+            cards.append({
+                **_job_brief(job), "status": job["status"], "local": job["location"], "modo": job.get("work_mode") or "",
+                "etapa": here["name"] if here else "",
+                "coluna": column if column in names else ("encerrada" if job["status"] in {"recusada", "fria"} else ""),
+                "proxima": next((s["scheduled_at"] for s in stages if s["state"] in {"atual", "pendente"} and s.get("scheduled_at")), None),
+            })
+        return {
+            "empresa": {"id": company["id"], "nome": company["name"]},
+            "quadro": board,
+            "personalizado": bool(company.get("pipeline")),
+            "tipos": pipeline.KINDS,
+            "sugestoes": [{"nome": name, "tipo": kind} for name, kind in pipeline.SUGGESTIONS],
+            "vagas": cards,
+        }
+
+    # Encaixe da vaga com o perfil
+
+    def my_skills(self) -> list[str]:
+        profile = self.profile.load()
+        parts = [profile.get("curriculo") or ""] + [story.get("texto", "") for story in profile.get("historias") or []]
+        declared = [item.get("skill", "") for item in profile.get("skills_extras") or [] if isinstance(item, dict)]
+        return list(dict.fromkeys([*insights.skills("\n".join(parts)), *(name for name in declared if name)]))
+
+    def rule_fit(self, job: dict[str, Any]) -> int | None:
+        """% das skills pedidas na vaga que o perfil tem; None se a vaga não cita nenhuma."""
+        wanted = cv.job_skills(job)
+        if not wanted:
+            return None
+        mine = {fold(name) for name in self.my_skills()}
+        return round(100 * sum(1 for name in wanted if fold(name) in mine) / len(wanted))
+
+    def job_fit(self, job_id: int) -> dict[str, Any]:
+        """Avaliação da IA: nota de 0 a 100, o que combina, o que falta e um resumo. Fica salva na vaga."""
+        job = self._job(job_id)
+        if not llm.available("responder"):
+            raise llm.LLMUnavailable("IA desligada. Ligue em Config > IA.")
+        profile = as_prompt(self.profile.load())
+        prompt = (
+            f"Perfil da pessoa:\n{profile[:5000]}\n\n"
+            f"Vaga: {job['title']} — {job['company']}\n{job['location']}\n{str(job['description'])[:4000]}"
+        )
+        system = (
+            "Você avalia o quanto um perfil se encaixa numa vaga. Compare habilidades, tempo de experiência, senioridade e idioma. "
+            "Use só o que está escrito no perfil e na vaga; o que o perfil não cita conta como lacuna, não como conhecimento. "
+            "Responda só com JSON: {\"nota\": 0 a 100, \"combina\": [\"até 6 itens\"], \"faltam\": [\"até 6 itens\"], \"resumo\": \"uma frase\"}"
+        )
+        raw = llm.ask_llm("responder", prompt, system=system, as_json=True, timeout=150)
+        try:
+            answer = json.loads(raw)
+            grade = max(0, min(100, int(float(answer.get("nota")))))
+        except (json.JSONDecodeError, AttributeError, TypeError, ValueError) as exc:
+            raise llm.LLMUnavailable("A IA não devolveu uma avaliação válida. Tente de novo.") from exc
+        result = {
+            "nota": grade,
+            "combina": [clean_space(str(item))[:120] for item in answer.get("combina") or []][:6],
+            "faltam": [clean_space(str(item))[:120] for item in answer.get("faltam") or []][:6],
+            "resumo": clean_space(str(answer.get("resumo") or ""))[:300],
+            "modelo": llm.model_name("responder"),
+            "em": now(),
+        }
+        self.store.set_job_fit(job_id, result)
+        self.hub.publish("vaga", id=job_id)
+        return result
+
+    # Chat da aba Busca: perguntas sobre o histórico, com as conversas guardadas
+
+    def chat_thread(self, thread_id: int) -> dict[str, Any]:
+        thread = self.store.chat_thread(thread_id)
+        if thread is None:
+            raise LookupError(f"Conversa {thread_id} não encontrada.")
+        return {**thread, "mensagens": self.store.chat_messages(thread_id)}
+
+    def _chat_overview(self) -> str:
+        jobs = self.store.jobs()
+        counts: dict[str, int] = {}
+        for job in jobs:
+            counts[job["status"]] = counts.get(job["status"], 0) + 1
+        lines = ", ".join(f"{STATUS_LABELS.get(key, key)}: {value}" for key, value in counts.items())
+        return f"{len(jobs)} vaga(s) salvas. Por status: {lines or 'nenhuma'}."
+
+    def chat(self, thread_id: int | None, text: str) -> dict[str, Any]:
+        text = clean_space(text)[:2000]
+        if not text:
+            raise DraftError("Escreva a pergunta.")
+        if thread_id is None:
+            thread_id = self.store.add_chat_thread(text[:70])
+        elif self.store.chat_thread(thread_id) is None:
+            raise LookupError(f"Conversa {thread_id} não encontrada.")
+        earlier = self.store.chat_messages(thread_id)[-6:]
+        self.store.add_chat_message(thread_id, "pessoa", text)
+        hits = self.search(text, 8)
+        sources = [{"tipo": hit["tipo"], "titulo": hit["titulo"], "vaga": hit["vaga"], "job_id": hit["job_id"], "quando": hit["quando"], "texto": hit["texto"]} for hit in hits]
+        answer, origin = self._chat_answer(text, earlier, hits)
+        self.store.add_chat_message(thread_id, "jobscout", answer, sources)
+        return {**self.chat_thread(thread_id), "origem": origin}
+
+    def _chat_answer(self, text: str, earlier: list[dict[str, Any]], hits: list[dict[str, Any]]) -> tuple[str, str]:
+        kinds = {"vaga": "vaga", "resposta": "resposta sua", "mensagem": "mensagem", "nota": "nota"}
+        if not llm.available("chat"):
+            if not hits:
+                return f"Não achei nada sobre isso no histórico. {self._chat_overview()} Com a IA ligada (Config > IA), eu também resumo a resposta.", "regras"
+            lines = [f"- {kinds.get(hit['tipo'], hit['tipo'])}{' (' + hit['vaga'] + ')' if hit['vaga'] else ''}: {hit['titulo']} — {hit['texto']}" for hit in hits[:5]]
+            return "Achei isto no histórico:\n" + "\n".join(lines), "regras"
+        context = "\n".join(
+            f"[{hit['tipo']}] {hit['vaga']} | {hit['titulo']} | {str(hit['quando'] or '')[:10]}\n{hit['texto']}" for hit in hits
+        ) or "(nada encontrado no histórico)"
+        talk = "\n".join(f"{'Pessoa' if row['role'] == 'pessoa' else 'JobScout'}: {row['text'][:400]}" for row in earlier)
+        system = (
+            "Você é o assistente do JobScout e responde sobre o histórico de candidaturas da pessoa. Use só o resumo e os trechos "
+            "do histórico abaixo; se a resposta não estiver neles, diga que não encontrou. Seja direto, em português, em até 5 frases, "
+            "citando vaga e empresa quando houver."
+        )
+        prompt = f"Resumo: {self._chat_overview()}\n\nTrechos do histórico:\n{context}\n\n" + (f"Conversa até agora:\n{talk}\n\n" if talk else "") + f"Pergunta: {text}"
+        try:
+            reply = llm.ask_llm("chat", prompt, system=system, timeout=120).strip()
+        except llm.LLMUnavailable as exc:
+            return f"A IA não respondeu ({exc}). Os trechos do histórico estão abaixo.", "regras"
+        return reply or "Não encontrei isso no histórico.", "ia"
+
+    def message_library(self) -> list[dict[str, Any]]:
+        return replies.library(self.message_overrides())
+
+    def message_overrides(self) -> dict[str, Any]:
+        return self._message_overrides_loader() if self._message_overrides_loader else {}
+
+    def results(self) -> list[dict[str, Any]]:
+        """Candidaturas com o que foi enviado e até onde cada uma chegou (retorno, entrevista, proposta)."""
+        reached = self.store.stages()
+        versions = [{**version, "label": version["name"]} for version in self.store.resume_versions()]
+        rows = []
+        for job in self.store.jobs():
+            stages = set(reached.get(job["id"], set())) | {job["status"]}
+            if not (job["applied_at"] or stages & set(APPLIED_STAGES)):
+                continue
+            rows.append({
+                "id": job["id"],
+                "titulo": job["title"],
+                "empresa": job["company"],
+                "fonte": SITE_NAMES.get(job["source"], job["source"]),
+                "senioridade": job.get("seniority") or "",
+                "modelo": job.get("work_mode") or "",
+                "regiao": job.get("region") or "",
+                "status": job["status"],
+                "candidatado_em": job["applied_at"] or "",
+                "documentos": job.get("documents") or "",
+                "curriculo": cv.resume_kind(job.get("documents") or "", versions),
+                "salario_informado": job.get("salary_informed") or "",
+                "retorno": bool(stages & RETURN_STAGES),
+                "entrevista": bool(stages & {"entrevista", "proposta"}),
+                "proposta": "proposta" in stages,
+                "recusada": "recusada" in stages,
+                "url": job["url"],
+            })
+        return rows
+
     def detail(self, job_id: int) -> dict[str, Any]:
         job = self._job(job_id)
         company = self.store.company_by_key(company_key(job["company"])) if job["company"] else None
+        versions = [{**version, "label": version["name"]} for version in self.store.resume_versions()]
         return {
             "vaga": job,
             "empresa": company,
@@ -854,6 +1468,14 @@ class Assistant:
             "notas": self.store.notes(job_id),
             "movimentos": self.store.movements(100, job_id),
             "rascunhos": self.store.drafts("pendente", job_id),
+            "recrutadores": self.store.job_contacts(job_id),
+            "encaixe": self.rule_fit(job),
+            "encaixe_ia": json.loads(job["fit_ai"]) if job.get("fit_ai") else None,
+            "curriculo": cv.resume_kind(job.get("documents") or "", versions),
+            "curriculos": [
+                {"valor": version["name"], "nome": f"Customizado: {version['name']}"} for version in versions
+                if version["job_id"] == job_id or not version["job_id"]
+            ] + [{"valor": "Currículo padrão", "nome": "Padrão: Currículo padrão"}],
         }
 
     def prepare(self, job_id: int) -> dict[str, Any]:
@@ -923,6 +1545,28 @@ class Assistant:
 
 def company_key(name: str) -> str:
     return fold(clean_space(name or ""))
+
+
+def _job_brief(job: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": job["id"], "titulo": job["title"], "empresa": job["company"], "status": job.get("status") or "",
+        "candidatado_em": job.get("applied_at") or "",
+    }
+
+
+def _linkedin_slug(url: str) -> str:
+    match = re.search(r"linkedin\.com/in/([^/?#]+)", url or "", re.I)
+    return (match.group(1) if match else (url or "")).strip("/").lower()
+
+
+def _documents(raw: Any) -> list[str]:
+    """Nomes de arquivo enviados (currículo, carta), sem caminho e sem repetir."""
+    names = []
+    for item in raw if isinstance(raw, list) else []:
+        name = clean_space(str(item or "")).replace("\\", "/").rsplit("/", 1)[-1][:160]
+        if name and name not in names:
+            names.append(name)
+    return names[:5]
 
 
 def _form_answers(raw: Any) -> list[dict[str, str]]:

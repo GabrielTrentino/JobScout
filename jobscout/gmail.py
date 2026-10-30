@@ -1,4 +1,4 @@
-"""Gmail somente leitura: OAuth no próprio computador e verificação periódica."""
+"""Google no próprio computador: Gmail só leitura e eventos do Google Agenda (lembretes), num OAuth só."""
 
 from __future__ import annotations
 
@@ -19,7 +19,14 @@ from jobscout.config import setting
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
-SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
+# Só eventos (criar e apagar os lembretes); não lê nem mexe no resto da agenda.
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events"
+SCOPE = f"{GMAIL_SCOPE} {CALENDAR_SCOPE}"
+CALENDAR_API = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+# Alertas de vagas do LinkedIn: vão para a busca automática, não para os rascunhos de recrutador.
+ALERT_SENDERS = ("jobalerts-noreply@linkedin.com", "jobs-listings@linkedin.com", "jobs-noreply@linkedin.com")
+ALERT_QUERY = "from:(" + " OR ".join(ALERT_SENDERS) + ") newer_than:7d"
 QUERY = "newer_than:3d -category:promotions -category:social"
 
 
@@ -28,9 +35,12 @@ class GmailError(RuntimeError):
 
 
 class Gmail:
-    def __init__(self, token_path: Path, opener: Callable[..., Any] = urlopen) -> None:
+    def __init__(self, token_path: Path, opener: Callable[..., Any] = urlopen,
+                 credentials: Callable[[], tuple[str, str]] | None = None) -> None:
         self.token_path = token_path
         self._open = opener
+        # Cliente OAuth salvo em Config; sem ele, vale o do .env.
+        self._credentials = credentials or (lambda: ("", ""))
         self._pending: dict[str, str] = {}
         self._lock = threading.Lock()
         self.last_check: str | None = None
@@ -38,11 +48,11 @@ class Gmail:
 
     @property
     def client_id(self) -> str:
-        return setting("JOBSCOUT_GMAIL_CLIENT_ID")
+        return self._credentials()[0] or setting("JOBSCOUT_GMAIL_CLIENT_ID")
 
     @property
     def client_secret(self) -> str:
-        return setting("JOBSCOUT_GMAIL_CLIENT_SECRET")
+        return self._credentials()[1] or setting("JOBSCOUT_GMAIL_CLIENT_SECRET")
 
     def configured(self) -> bool:
         return bool(self.client_id and self.client_secret)
@@ -57,7 +67,22 @@ class Gmail:
             "ultima_verificacao": self.last_check,
             "erro": self.last_error,
             "intervalo_min": self.interval_minutes(),
+            "agenda": self.calendar_ready(),
+            "agenda_pendente": self.connected() and not self.calendar_ready(),
         }
+
+    def granted(self) -> set[str]:
+        if not self.connected():
+            return set()
+        try:
+            token = json.loads(self.token_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return set()
+        # Tokens antigos não guardavam o escopo: eram só do Gmail.
+        return set(str(token.get("scope") or GMAIL_SCOPE).split())
+
+    def calendar_ready(self) -> bool:
+        return CALENDAR_SCOPE in self.granted()
 
     def interval_minutes(self) -> int:
         try:
@@ -67,7 +92,7 @@ class Gmail:
 
     def auth_url(self, redirect_uri: str) -> str:
         if not self.configured():
-            raise GmailError("Defina JOBSCOUT_GMAIL_CLIENT_ID e JOBSCOUT_GMAIL_CLIENT_SECRET no .env.")
+            raise GmailError("Preencha o ID e a chave do cliente do Google em Config > Gmail.")
         state = secrets.token_urlsafe(24)
         verifier = secrets.token_urlsafe(64)
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
@@ -152,9 +177,9 @@ class Gmail:
         except (URLError, OSError) as exc:
             raise GmailError(f"Sem conexão com o Gmail: {exc}") from exc
 
-    def fetch_new(self, seen: Callable[[str], bool], limit: int = 50) -> list[tuple[str, bytes]]:
+    def fetch_new(self, seen: Callable[[str], bool], limit: int = 50, query: str = QUERY) -> list[tuple[str, bytes]]:
         """Devolve (id, bytes .eml) dos e-mails recentes que ainda não foram vistos."""
-        listing = self._get("/messages", {"q": QUERY, "maxResults": limit})
+        listing = self._get("/messages", {"q": query, "maxResults": limit})
         found = []
         for item in listing.get("messages", []):
             message_id = item["id"]
@@ -190,3 +215,30 @@ class Poller:
                 except GmailError:
                     pass
             self._stop.wait(self.gmail.interval_minutes() * 60)
+
+    # Google Agenda (lembretes)
+
+    def _send(self, method: str, url: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        data = json.dumps(body).encode("utf-8") if body is not None else None
+        headers = {"Authorization": "Bearer " + self._access_token()}
+        if data is not None:
+            headers["Content-Type"] = "application/json"
+        request = Request(url, data=data, headers=headers, method=method)
+        try:
+            with self._open(request, timeout=30) as response:
+                raw = response.read().decode("utf-8")
+                return json.loads(raw) if raw.strip() else {}
+        except HTTPError as exc:
+            if exc.code == 403:
+                raise GmailError("O Google não deu permissão de agenda. Desconecte e conecte o Google de novo.") from exc
+            raise GmailError(f"Google Agenda respondeu {exc.code}.") from exc
+        except (URLError, OSError) as exc:
+            raise GmailError(f"Sem conexão com o Google Agenda: {exc}") from exc
+
+    def create_event(self, event: dict[str, Any]) -> dict[str, Any]:
+        if not self.calendar_ready():
+            raise GmailError("Conecte o Google com a permissão de agenda.")
+        return self._send("POST", CALENDAR_API, event)
+
+    def delete_event(self, event_id: str) -> None:
+        self._send("DELETE", f"{CALENDAR_API}/{event_id}")

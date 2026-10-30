@@ -1,6 +1,6 @@
 "use strict";
 
-const DEFAULTS = { backend: "http://127.0.0.1:8765", autofill: true };
+const DEFAULTS = { backend: "http://127.0.0.1:8765", autofill: true, sugestoes: true };
 const LABELS = {
   vaga: "Nova vaga",
   vaga_alteracao: "Vaga alterada",
@@ -13,6 +13,7 @@ const list = document.getElementById("list");
 const status = document.getElementById("status");
 const backendInput = document.getElementById("backend");
 const autofill = document.getElementById("autofill");
+const suggestions = document.getElementById("suggestions");
 
 function title(draft) {
   const p = draft.payload;
@@ -78,8 +79,7 @@ async function decide(id, action, error) {
   }
   const summary = await (await fetch(backend + "/api/extensao/resumo")).json();
   chrome.action.setBadgeText({ text: summary.pendentes ? String(summary.pendentes) : "" });
-  load();
-}
+  }
 
 document.getElementById("open-panel").addEventListener("click", async (event) => {
   event.preventDefault();
@@ -89,6 +89,7 @@ document.getElementById("open-panel").addEventListener("click", async (event) =>
 chrome.storage.local.get(DEFAULTS).then((stored) => {
   backendInput.value = stored.backend;
   autofill.checked = stored.autofill !== false;
+  suggestions.checked = stored.sugestoes !== false;
 });
 
 backendInput.addEventListener("change", async () => {
@@ -97,5 +98,96 @@ backendInput.addEventListener("change", async () => {
 });
 
 autofill.addEventListener("change", () => chrome.storage.local.set({ autofill: autofill.checked }));
+suggestions.addEventListener("change", () => chrome.storage.local.set({ sugestoes: suggestions.checked }));
+
+// Formulários em outros sites: a flag por site (ou em todos) pede a permissão do Chrome só para ele.
+const OWN = [/(^|\.)linkedin\.com$/, /\.inhire\.(app|com\.br)$/, /^web\.whatsapp\.com$/, /^mail\.google\.com$/];
+const formsSite = document.getElementById("forms-site");
+const formsAll = document.getElementById("forms-all");
+const formsHost = document.getElementById("forms-host");
+const formsHere = document.getElementById("forms-here");
+const formsList = document.getElementById("forms-sites");
+const formsError = document.getElementById("forms-error");
+let tab = null;
+let origin = "";
+
+function ask(message) {
+  return new Promise((resolve) => chrome.runtime.sendMessage(message, (response) => resolve(response || {})));
+}
+
+async function renderForms() {
+  const state = await ask({ kind: "forms_state" });
+  const sites = state.formSites || [];
+  formsAll.checked = Boolean(state.formAll);
+  let host = "";
+  try {
+    const url = new URL(tab && tab.url ? tab.url : "");
+    if (/^https?:$/.test(url.protocol)) {
+      origin = url.origin;
+      host = url.hostname;
+    }
+  } catch (error) {
+    origin = "";
+  }
+  const own = host && OWN.some((rule) => rule.test(host));
+  formsHost.textContent = host || "neste site";
+  formsSite.checked = Boolean(origin && sites.includes(origin));
+  formsSite.disabled = !origin || own;
+  formsHere.textContent = !origin ? "Abra a página do formulário para ligar neste site."
+    : own ? "Neste site o JobScout já ajuda sempre."
+      : formsSite.checked || formsAll.checked ? "Ligado aqui: sugestões aparecem ao lado das perguntas. O Enviar é sempre seu."
+        : "Desligado aqui.";
+  formsList.replaceChildren(...sites.map((site) => {
+    const item = document.createElement("li");
+    const name = document.createElement("span");
+    name.textContent = site.replace(/^https?:\/\//, "");
+    const remove = document.createElement("button");
+    remove.className = "no";
+    remove.textContent = "×";
+    remove.title = "Desligar neste site";
+    remove.addEventListener("click", async () => {
+      await ask({ kind: "forms_set", origin: site, on: false });
+      chrome.permissions.remove({ origins: [site + "/*"] });
+      renderForms();
+    });
+    item.append(name, remove);
+    return item;
+  }));
+}
+
+formsSite.addEventListener("change", async () => {
+  formsError.textContent = "";
+  if (formsSite.checked) {
+    // O pedido de permissão precisa sair direto do clique.
+    const granted = await chrome.permissions.request({ origins: [origin + "/*"] });
+    if (!granted) {
+      formsSite.checked = false;
+      formsError.textContent = "Sem a permissão do Chrome, o JobScout não lê esta página.";
+      return;
+    }
+  }
+  await ask({ kind: "forms_set", origin, on: formsSite.checked, tabId: tab && tab.id });
+  renderForms();
+});
+
+formsAll.addEventListener("change", async () => {
+  formsError.textContent = "";
+  if (formsAll.checked) {
+    const granted = await chrome.permissions.request({ origins: ["https://*/*", "http://*/*"] });
+    if (!granted) {
+      formsAll.checked = false;
+      formsError.textContent = "Sem a permissão do Chrome para todos os sites, use a opção por site.";
+      return;
+    }
+  }
+  await ask({ kind: "forms_set", all: formsAll.checked, on: formsAll.checked, tabId: tab && tab.id });
+  if (!formsAll.checked) chrome.permissions.remove({ origins: ["https://*/*", "http://*/*"] });
+  renderForms();
+});
+
+chrome.tabs.query({ active: true, currentWindow: true }).then(([active]) => {
+  tab = active || null;
+  renderForms();
+});
 
 load();

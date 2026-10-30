@@ -123,13 +123,31 @@ class CompanyFlowTest(unittest.TestCase):
         self.assertEqual([(a["question"], a["answer"], a["origin"]) for a in saved], [("Quantos anos de experiência com Python?", "5", "formulario")])
         self.assertEqual(self.assistant.answer_history()[0]["valor"], "5")
 
-    def test_user_can_skip_saving_form_answers(self) -> None:
+    def test_unchecked_answers_stay_in_the_job_history_but_are_not_reused(self) -> None:
         drafts = self.assistant.intake({
             "tipo": "application_submitted", "site": "linkedin", "vaga": {"url": URL},
-            "respostas": [{"rotulo": "Pretensão", "valor": "10000"}],
+            "respostas": [{"rotulo": "Pretensão salarial", "valor": "10000"}],
+            "documentos": ["C:\\fakepath\\CV Ana 2026.pdf"],
         })
         self.assistant.approve(drafts[0]["id"], {"guardar_respostas": False})
-        self.assertEqual(self.store.answers(self.store.job_by_url(URL)["id"]), [])
+        job = self.store.job_by_url(URL)
+        answers = self.store.answers(job["id"])
+        self.assertEqual([(a["answer"], a["origin"]) for a in answers], [("10000", "registro")])
+        self.assertEqual(self.assistant.answer_history(), [])
+        self.assertEqual((job["documents"], job["salary_informed"]), ("CV Ana 2026.pdf", "10000"))
+        result = self.assistant.results()[0]
+        self.assertEqual((result["documentos"], result["salario_informado"], result["retorno"]), ("CV Ana 2026.pdf", "10000", False))
+
+    def test_results_count_every_stage_reached(self) -> None:
+        drafts = self.assistant.intake({"tipo": "application_submitted", "site": "linkedin", "vaga": {"url": URL}})
+        self.assistant.approve(drafts[0]["id"])
+        job = self.store.job_by_url(URL)
+        self.assistant.set_status(job["id"], "entrevista")
+        self.assistant.set_status(job["id"], "recusada")
+        row = self.assistant.results()[0]
+        self.assertTrue(row["retorno"])
+        self.assertTrue(row["entrevista"])  # passou pela entrevista antes da recusa
+        self.assertFalse(row["proposta"])
 
     def test_cold_job_becomes_draft_once(self) -> None:
         job = self.approve_job()

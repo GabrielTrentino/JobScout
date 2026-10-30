@@ -37,8 +37,15 @@ def main() -> None:
     print(f"Dados em {data_dir()}")
     if bound != 8765:
         print(f"Aviso: a extensão procura a porta 8765. Ajuste o endereço no popup dela para {url}")
+    try:
+        prepared = app.prepare_folder(url)
+        print(f"Pasta do JobScout em {prepared['pasta']}")
+    except OSError as exc:
+        print(f"Aviso: não consegui preparar a pasta do JobScout. {exc}")
     app.hub.activity("JobScout ligado. Aguardando vagas, formulários e e-mails.", "ok")
     app.start_cold_check()
+    app.reminders.start()
+    app.search.start()
 
     use_overlay = not args.navegador and not args.no_browser and overlay.available()
     if not args.navegador and not args.no_browser and not use_overlay:

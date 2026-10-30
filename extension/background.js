@@ -1,7 +1,7 @@
 // Service worker: recebe os eventos das abas e fala com o JobScout neste computador.
 "use strict";
 
-const DEFAULTS = { backend: "http://127.0.0.1:8765", autofill: true };
+const DEFAULTS = { backend: "http://127.0.0.1:8765", autofill: true, sugestoes: true };
 let fieldsCache = { at: 0, campos: [], historico: [] };
 
 async function settings() {
@@ -82,8 +82,68 @@ async function flushQueue() {
   }
 }
 
+// Formulários em outros sites: o popup liga por site (ou em todos os sites de vagas) e pede a permissão;
+// aqui o script genérico é registrado para esses endereços e injetado na aba aberta na hora.
+const FORM_SCRIPT = "jobscout-formularios";
+const FORM_FILES = ["content/core.js", "content/page.js", "content/generic.js"];
+// Esses já têm adaptador próprio (ou são chats): o genérico não roda neles.
+const OWN_SITES = ["https://www.linkedin.com/*", "https://*.inhire.app/*", "https://*.inhire.com.br/*", "https://web.whatsapp.com/*", "https://mail.google.com/*"];
+
+async function formState() {
+  const { formSites = [], formAll = false } = await chrome.storage.local.get({ formSites: [], formAll: false });
+  return { formSites, formAll };
+}
+
+async function syncFormScripts() {
+  const { formSites, formAll } = await formState();
+  const matches = formAll ? ["https://*/*", "http://*/*"] : formSites.map((origin) => origin + "/*");
+  // Só registra o que tem permissão: se a pessoa tirou a permissão no Chrome, o site sai sozinho.
+  const allowed = [];
+  for (const pattern of matches) {
+    if (await chrome.permissions.contains({ origins: [pattern] })) allowed.push(pattern);
+  }
+  const existing = await chrome.scripting.getRegisteredContentScripts({ ids: [FORM_SCRIPT] });
+  if (existing.length) await chrome.scripting.unregisterContentScripts({ ids: [FORM_SCRIPT] });
+  if (!allowed.length) return { ativos: [] };
+  await chrome.scripting.registerContentScripts([{
+    id: FORM_SCRIPT, matches: allowed, excludeMatches: OWN_SITES, js: FORM_FILES, runAt: "document_idle", persistAcrossSessions: true,
+    // Muitos sites de empresa embutem o formulário (Greenhouse, Lever...) num iframe.
+    allFrames: true,
+  }]);
+  return { ativos: allowed };
+}
+
+async function injectNow(tabId) {
+  if (!tabId) return;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: FORM_FILES });
+  } catch (error) {
+    // Página do Chrome ou sem permissão: vale a partir do próximo carregamento.
+  }
+}
+
+async function setFormSite({ origin, on, all, tabId }) {
+  const state = await formState();
+  if (all !== undefined) {
+    state.formAll = Boolean(all);
+  } else if (origin) {
+    const sites = new Set(state.formSites);
+    if (on) sites.add(origin);
+    else sites.delete(origin);
+    state.formSites = [...sites].sort();
+  }
+  await chrome.storage.local.set(state);
+  const result = await syncFormScripts();
+  if ((on || all) && tabId) await injectNow(tabId);
+  return { ...state, ...result };
+}
+
 async function handle(message) {
   switch (message.kind) {
+    case "forms_state":
+      return formState();
+    case "forms_set":
+      return setFormSite(message);
     case "event": {
       let result;
       try {
@@ -107,6 +167,22 @@ async function handle(message) {
     }
     case "settings":
       return settings();
+    case "suggest":
+      return call("/api/extensao/sugestoes", { json: { campos: message.campos } });
+    // Barra de resposta dos chats (LinkedIn, WhatsApp Web, Gmail)
+    case "chat_context":
+      return call("/api/extensao/chat", { json: message.dados });
+    case "chat_link":
+      return call("/api/extensao/chat/vincular", { json: message.dados });
+    case "chat_approach":
+      return call("/api/extensao/chat/abordagem", { json: message.dados });
+    case "reply":
+      return call("/api/mensagens/responder", { json: message.dados });
+    case "improvement":
+      return call("/api/melhorias", { json: message.dados });
+    case "suggest_ai":
+      // A IA local pode levar alguns segundos (mais na primeira vez, enquanto carrega o modelo).
+      return call("/api/extensao/sugestoes-ia", { json: { campos: message.campos, vaga: message.vaga } });
     case "insertions":
       return { insercoes: await call("/api/extensao/insercoes?pagina=" + encodeURIComponent(message.pagina)) };
     case "insertion_done":
@@ -129,9 +205,16 @@ chrome.runtime.onMessage.addListener((message, _sender, reply) => {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create("badge", { periodInMinutes: 1 });
   refreshBadge();
+  syncFormScripts().catch(() => {});
 });
 
-chrome.runtime.onStartup.addListener(refreshBadge);
+chrome.runtime.onStartup.addListener(() => {
+  refreshBadge();
+  syncFormScripts().catch(() => {});
+});
+
+// Permissão tirada pelo Chrome (Detalhes da extensão > Acesso ao site): o registro acompanha.
+chrome.permissions.onRemoved.addListener(() => syncFormScripts().catch(() => {}));
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "badge") refreshBadge();

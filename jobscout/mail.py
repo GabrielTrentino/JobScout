@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import json
 import re
 from datetime import datetime
 from email import message_from_bytes, policy
@@ -11,6 +12,7 @@ from typing import Any
 
 from jobscout import llm
 from jobscout.activities import clean_space, fold
+from jobscout.gmail import ALERT_SENDERS
 
 KEYWORDS = (
     "processo seletivo", "entrevista", "candidatura", "vaga", "recrutamento", "recrutador",
@@ -70,6 +72,7 @@ def parse_eml(data: bytes) -> dict[str, Any]:
     if part is not None:
         content = part.get_content()
         body = _strip_html(content) if part.get_content_subtype() == "html" else content
+    html_part = message.get_body(preferencelist=("html",))
     return {
         "remetente_nome": name.strip(),
         "remetente_email": address.strip().lower(),
@@ -77,6 +80,10 @@ def parse_eml(data: bytes) -> dict[str, Any]:
         "recebido_em": received,
         "corpo": body.strip()[:20000],
         "message_id": str(message.get("Message-ID", "")).strip(),
+        # Os links das vagas (alertas do LinkedIn) só existem no HTML.
+        "html": html_part.get_content()[:300000] if html_part is not None else "",
+        # Lista de envio (descadastro): newsletter e marketing, não uma pessoa escrevendo.
+        "em_massa": bool(message.get("List-Unsubscribe") or message.get("List-Id")),
     }
 
 
@@ -124,6 +131,68 @@ def looks_relevant(message: dict[str, Any], jobs: list[dict[str, Any]]) -> bool:
         return True
     text = fold(f"{message.get('assunto', '')} {message.get('corpo', '')[:3000]}")
     return any(word in text for word in KEYWORDS)
+
+
+ATS_MAIL = PLATFORM_MAIL - {"linkedin"}
+# Conteúdo de massa que cita "vaga" ou "oportunidade" sem ser um processo seletivo da pessoa.
+MARKETING = (
+    "webinar", "newsletter", "curso", "bootcamp", "inscreva-se", "inscricoes abertas", "desconto", "promocao",
+    "black friday", "evento online", "masterclass", "mentoria gratuita", "unsubscribe", "descadastr",
+    "vagas da semana", "vagas recomendadas", "jobs you may", "recommended jobs", "empregos recomendados",
+)
+STRONG = (
+    "processo seletivo", "sua candidatura", "your application", "entrevista", "interview", "teste tecnico",
+    "case tecnico", "desafio tecnico", "proposta de trabalho", "offer letter", "seguir com o seu perfil",
+    "gostariamos de conversar", "would like to schedule", "next steps", "proximas etapas", "feedback do processo",
+)
+RELEVANCE_SYSTEM = (
+    "Você avalia e-mails para uma pessoa que procura emprego. Diga se o e-mail é sobre um processo de "
+    "recrutamento e seleção que envolve ela diretamente: abordagem de recrutador, candidatura, entrevista, "
+    "teste, retorno, recusa, proposta ou pedido de documentos. Newsletter, curso, marketing, alerta de vagas "
+    "genérico e notificação de rede social não contam. Responda só com JSON: "
+    '{"recrutamento": true ou false, "motivo": "frase curta em português"}'
+)
+
+
+def relevance(message: dict[str, Any], jobs: list[dict[str, Any]]) -> dict[str, Any]:
+    """É recrutamento e seleção para a pessoa? Regras decidem os casos claros; a IA local, os duvidosos.
+
+    Devolve {recrutamento, motivo, origem}. Sem IA, na dúvida conta como recrutamento (vira rascunho,
+    e a pessoa descarta): perder um e-mail de processo seletivo é pior que um rascunho a mais.
+    """
+    sender = message.get("remetente_email", "")
+    if sender in ALERT_SENDERS:
+        return {"recrutamento": False, "motivo": "alerta de vagas do LinkedIn (vai para a busca automática)", "origem": "regras", "alerta": True}
+    text = fold(f"{message.get('assunto', '')}\n{message.get('corpo', '')[:6000]}")
+    org = sender_org(sender)
+    if org and org not in FREE_MAIL and any(org in _slug(job.get("company") or "") for job in jobs if job.get("company")):
+        return {"recrutamento": True, "motivo": "remetente de uma empresa com vaga salva", "origem": "regras"}
+    if not looks_relevant(message, jobs):
+        return {"recrutamento": False, "motivo": "não fala de vaga, entrevista nem candidatura", "origem": "regras"}
+    strong = [word for word in STRONG if word in text]
+    marketing = [word for word in MARKETING if word in text]
+    if strong and not marketing and not message.get("em_massa"):
+        return {"recrutamento": True, "motivo": f"fala de “{strong[0]}”", "origem": "regras"}
+    if org in ATS_MAIL and not marketing:
+        return {"recrutamento": True, "motivo": f"plataforma de recrutamento ({org})", "origem": "regras"}
+    if llm.available("classificar"):
+        prompt = (
+            f"De: {message.get('remetente_nome', '')} <{sender}>\n"
+            f"Enviado para uma lista: {'sim' if message.get('em_massa') else 'não'}\n"
+            f"Assunto: {message.get('assunto', '')}\n\n{message.get('corpo', '')[:3500]}"
+        )
+        try:
+            answer = json.loads(llm.ask_llm("classificar", prompt, system=RELEVANCE_SYSTEM, as_json=True, timeout=90))
+            return {
+                "recrutamento": bool(answer.get("recrutamento")),
+                "motivo": clean_space(str(answer.get("motivo") or ""))[:160] or "avaliado pela IA",
+                "origem": "llm",
+            }
+        except (llm.LLMUnavailable, json.JSONDecodeError, AttributeError):
+            pass
+    if marketing or message.get("em_massa"):
+        return {"recrutamento": False, "motivo": f"parece envio em massa ({marketing[0] if marketing else 'lista de e-mails'})", "origem": "regras"}
+    return {"recrutamento": True, "motivo": "cita vaga ou candidatura (sem IA para confirmar)", "origem": "regras"}
 
 
 def classify(message: dict[str, Any]) -> tuple[str, str]:
@@ -223,4 +292,6 @@ def build_draft(message: dict[str, Any], jobs: list[dict[str, Any]], *, external
         "vaga": f"{job['title']} — {job['company']}" if job else "",
         "status_proposto": target if job else "",
         "data_evento": when or "",
+        # Por que o JobScout achou que é recrutamento (regras ou IA), para conferir no rascunho.
+        "relevancia": message.get("relevancia", ""),
     }

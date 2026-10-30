@@ -49,7 +49,8 @@ class GmailTest(unittest.TestCase):
         gmail = Gmail(self.token, self.opener)
         url = gmail.auth_url("http://127.0.0.1:8765/api/gmail/retorno")
         query = parse_qs(urlparse(url).query)
-        self.assertEqual(query["scope"], ["https://www.googleapis.com/auth/gmail.readonly"])
+        # Gmail só leitura e só eventos da agenda (lembretes); nada além disso.
+        self.assertEqual(query["scope"], ["https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.events"])
         self.assertEqual(query["code_challenge_method"], ["S256"])
         gmail.finish("code", query["state"][0], "http://127.0.0.1:8765/api/gmail/retorno")
         self.assertTrue(gmail.connected())
