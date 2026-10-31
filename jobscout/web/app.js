@@ -662,6 +662,7 @@ function onActivity(item) {
   }
   renderBubble();
   showToast(item);
+  if (state.overlay && item.nivel === "aviso" && bridge()) bridge().avisar(item.texto);
   const orb = document.getElementById("orb");
   if (item.nivel === "aviso") {
     orb.classList.remove("is-alert");
@@ -781,6 +782,11 @@ function renderBubble() {
   const count = document.getElementById("bubble-count");
   count.hidden = !pending;
   count.textContent = pending > 99 ? "99+" : String(pending);
+  const tip = `${state.appName} · ${pending ? `${pending} rascunho(s) pendente(s)` : "tudo em dia"}`;
+  if (state.overlay && state.trayTip !== tip && bridge()) {
+    state.trayTip = tip;
+    bridge().dica(tip);
+  }
   // Boneco: arremessa a maleta logo depois do envio, pensa enquanto lê uma vaga, senta quando está parado.
   const pose = Date.now() < state.throwUntil ? "throw" : working ? "think" : "idle";
   const stickman = document.getElementById("stickman");
@@ -858,8 +864,10 @@ function setupOverlay() {
   }
   for (const button of document.querySelectorAll("[data-close]")) {
     button.addEventListener("click", async () => {
-      if (!(await ask(`Fechar o ${state.appName}?`, "A extensão guarda o que capturar e envia quando você abrir de novo.", "Fechar"))) return;
       const api = bridge();
+      // Com o ícone na bandeja, o × só esconde: quem encerra é o Sair do menu do ícone.
+      if (api && await api.ocultar()) return;
+      if (!(await ask(`Fechar o ${state.appName}?`, "A extensão guarda o que capturar e envia quando você abrir de novo.", "Fechar"))) return;
       if (api) api.fechar();
       else window.close();
     });
@@ -1186,6 +1194,11 @@ function renderPresets(data) {
       h("div", { class: "row" },
         h("button", { type: "button", text: "Usar e buscar", onclick: () => { fillSearchForm(preset.config); document.getElementById("as-run").click(); } }),
         h("button", { type: "button", class: "ghost", text: "Só preencher", onclick: () => fillSearchForm(preset.config) }),
+        h("label", { class: "check", title: "Roda junto com a busca automática, no intervalo salvo" },
+          h("input", { type: "checkbox", checked: Boolean(preset.auto), onchange: async (event) => {
+            preset.auto = event.target.checked;
+            renderPresets(await api("/api/busca/presets", { method: "PUT", json: { presets: searchState.presets } }));
+          } }), "Buscar sozinho"),
         h("button", { type: "button", class: "danger", text: "Excluir", onclick: async () => {
           renderPresets(await api("/api/busca/presets", { method: "PUT", json: { presets: searchState.presets.filter((item) => item !== preset) } }));
         } }),
@@ -1288,6 +1301,40 @@ function setupChat() {
 // Aparência: tema importado e personagem no lugar do boneco
 
 const look = { avatar: null, template: null };
+
+function appPasswordForm() {
+  const email = h("input", { type: "email", placeholder: "seu.email@gmail.com", "aria-label": "E-mail", autocomplete: "off" });
+  const secret = h("input", { type: "password", placeholder: "Senha de app (16 letras)", "aria-label": "Senha de app", autocomplete: "off" });
+  const server = h("input", { placeholder: "Servidor IMAP (só se não for Gmail)", "aria-label": "Servidor IMAP" });
+  const notice = h("p", { class: "notice", role: "status" });
+  return h("form", { class: "profile", onsubmit: async (event) => {
+    event.preventDefault();
+    notice.textContent = "Testando o login…";
+    try {
+      await api("/api/email/conectar", { method: "POST", json: { email: email.value, senha: secret.value, servidor: server.value } });
+      await refresh();
+    } catch (error) {
+      notice.textContent = error.message;
+    }
+  } }, email, secret, server, h("button", { type: "submit", text: "Conectar e-mail" }), notice);
+}
+
+function setupBackground() {
+  const hidden = document.getElementById("bg-hidden");
+  const autostart = document.getElementById("bg-autostart");
+  const read = () => {
+    hidden.checked = Boolean(state.prefs && state.prefs.iniciar_oculto);
+    autostart.checked = Boolean(state.prefs && state.prefs.iniciar_com_windows);
+  };
+  document.querySelector('[data-view="config"]').addEventListener("click", read);
+  read();
+  const save = async (data) => {
+    state.prefs = { ...state.prefs, ...(await api("/api/segundo-plano", { method: "POST", json: data })) };
+    read();
+  };
+  hidden.addEventListener("change", () => save({ iniciar_oculto: hidden.checked }));
+  autostart.addEventListener("change", () => save({ iniciar_com_windows: autostart.checked }));
+}
 
 function googleForm() {
   const id = h("input", { placeholder: "ID do cliente (…apps.googleusercontent.com)", "aria-label": "ID do cliente", autocomplete: "off" });
@@ -1714,6 +1761,8 @@ async function renderProfile() {
     quick.appendChild(h("label", {}, label, input));
   }
   // "Presencial" sozinho é de antes da divisão: conta como na cidade atual.
+  const convert = h("button", { type: "button", class: "ghost", text: "Completar a outra moeda pela cotação de hoje", onclick: () => fillOtherCurrency(convert) });
+  quick.appendChild(h("div", { class: "salary-convert" }, convert, h("span", { class: "hint", id: "salary-rate" })));
   const accepted = (profile.modelos_trabalho || "").split(",").map((item) => (item.trim() === "Presencial" ? "Presencial (na cidade atual)" : item.trim()));
   quick.appendChild(h("fieldset", { class: "modes" },
     h("legend", { text: "Modelos de trabalho que aceita" }),
@@ -1723,6 +1772,30 @@ async function renderProfile() {
   clear(stories);
   for (const story of profile.historias || []) stories.appendChild(storyRow(story));
   await renderHistory();
+}
+
+// Pretensão: preenche o campo vazio convertendo o outro; a pessoa confere e salva.
+async function fillOtherCurrency(button) {
+  const form = document.getElementById("profile-form");
+  const real = form.elements.pretensao_salarial;
+  const dollar = form.elements.pretensao_usd;
+  const note = document.getElementById("salary-rate");
+  const number = (text) => Number(String(text).replace(/[^\d.,]/g, "").replace(/[.,](\d{3})/g, "$1").replace(",", "."));
+  button.disabled = true;
+  try {
+    const { usd_brl: rate } = await api("/api/cotacao");
+    if (real.value.trim() && !dollar.value.trim()) dollar.value = `US$ ${Math.round(number(real.value) / rate / 100) * 100}/mês`;
+    else if (dollar.value.trim() && !real.value.trim()) real.value = `R$ ${(Math.round(number(dollar.value) * rate / 100) * 100).toLocaleString("pt-BR")}`;
+    else {
+      note.textContent = "Deixe uma das duas vazia para eu preencher.";
+      return;
+    }
+    note.textContent = `US$ 1 = R$ ${rate.toFixed(2).replace(".", ",")}. Valor arredondado: confira e salve.`;
+  } catch (error) {
+    note.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function renderHistory() {
@@ -2192,7 +2265,7 @@ function renderVersions() {
   for (const version of cvx.versions) {
     list.appendChild(h("li", {}, h("button", { type: "button", class: cvx.current && cvx.current.id === version.id ? "is-on" : "", onclick: () => openVersion(version.id) },
       version.name,
-      h("small", { text: `${version.job_title || "vaga removida"} · ${when(version.updated_at)}${version.pdf ? " · PDF" : ""}` }),
+      h("small", { text: `${version.job_id ? version.job_title || "vaga removida" : "Modelo padrão"} · ${when(version.updated_at)}${version.pdf ? " · PDF" : ""}` }),
     )));
   }
 }
@@ -2316,6 +2389,19 @@ function setupCvx() {
     cvx.dirty = true;
     notice.textContent = "Montado a partir do texto. Revise e salve.";
     renderCvx();
+  });
+  document.getElementById("cvv-model-new").addEventListener("click", async () => {
+    const input = document.getElementById("cvv-model");
+    const cvvNotice = document.getElementById("cvv-notice");
+    try {
+      const created = await api("/api/curriculo/versoes", { method: "POST", json: { modelo: input.value } });
+      input.value = "";
+      await loadCvx(true);
+      await openVersion(created.id);
+      cvvNotice.textContent = `Modelo “${created.name}” criado. Ajuste e exporte o PDF.`;
+    } catch (error) {
+      cvvNotice.textContent = error.message;
+    }
   });
   document.getElementById("cvv-create").addEventListener("click", async () => {
     const select = document.getElementById("cvv-job");
@@ -2670,7 +2756,9 @@ function reminderLine(reminder, due, onChange) {
       h("span", { class: "hint", text: ` · ${late ? "venceu " : ""}${when(reminder.next_at)}${repeat}${reminder.calendar_id ? " · na agenda" : ""}` }),
     ),
     h("div", { class: "row" },
-      reminder.intent && reminder.job_id ? h("button", { type: "button", class: late ? "" : "ghost", text: "Escrever mensagem", onclick: () => {
+      reminder.calendar_id ? null : h("a", { class: "ghost file-button", href: reminder.agenda_link, target: "_blank", rel: "noopener", title: "Abre o Google Agenda com o evento pronto; é só salvar", text: "Agenda" }),
+      reminder.calendar_id ? null : h("a", { class: "ghost file-button", href: `/api/lembretes/${reminder.id}/agenda.ics`, download: "lembrete.ics", title: "Arquivo para Outlook e outras agendas", text: ".ics" }),
+      reminder.intent && reminder.job_id && !reminder.intent.startsWith("etapa:") ? h("button", { type: "button", class: late ? "" : "ghost", text: "Escrever mensagem", onclick: () => {
         msgState.presetJob = String(reminder.job_id);
         msgState.presetIntent = reminder.intent;
         document.getElementById("drawer").close();
@@ -2701,8 +2789,7 @@ function reminderForm(job, data, onSaved) {
   preset.addEventListener("change", fill);
   fill();
   const calendarNote = data.agenda.conectada ? "Também vai para o Google Agenda."
-    : data.agenda.google ? "Para ir ao Google Agenda, desconecte e conecte o Google em Config (permissão nova)."
-      : "Conecte o Google em Config para o lembrete ir também para o Google Agenda.";
+    : "Depois de criar, o botão Agenda abre o evento pronto no Google Agenda; é só salvar.";
   return h("form", { class: "reminder-form", onsubmit: async (event) => {
     event.preventDefault();
     const item = data.modelos.find((row) => row.chave === preset.value);
@@ -3539,14 +3626,40 @@ function renderConfig() {
   const gmail = document.getElementById("gmail");
   clear(gmail);
   const g = state.gmail;
-  if (!g.configurado) {
+  const oauth = document.getElementById("gmail-oauth");
+  clear(oauth);
+  if (!g.conectado) gmail.appendChild(appPasswordForm());
+  if (g.conectado && g.metodo === "senha_app") {
+    const notice = h("p", { class: "notice", role: "status" });
     gmail.append(
+      h("p", { text: `Conectado por senha de app: ${g.email}. Verifica a cada ${g.intervalo_min} min, só leitura.` }),
+      h("p", { class: "hint", text: g.ultima_verificacao ? "Última verificação: " + when(g.ultima_verificacao) : "Ainda não verificou." }),
+      g.erro ? h("p", { class: "notice is-error", text: g.erro }) : null,
+      h("div", { class: "row" },
+        h("button", { type: "button", text: "Verificar agora", onclick: async () => {
+          notice.textContent = "Verificando…";
+          try {
+            const result = await api("/api/gmail/verificar", { method: "POST", json: {} });
+            notice.textContent = `${result.novos} e-mail(s) viraram rascunho.`;
+          } catch (error) {
+            notice.textContent = error.message;
+          }
+        } }),
+        h("button", { type: "button", class: "danger", text: "Desconectar", onclick: async () => {
+          await api("/api/gmail/desconectar", { method: "POST", json: {} });
+          await refresh();
+        } }),
+      ),
+      notice,
+    );
+  } else if (!g.conectado && !g.configurado) {
+    oauth.append(
       h("p", { text: "Desligado. Siga o passo a passo e cole aqui o ID e a chave do cliente:" }),
       googleForm(),
       h("p", { class: "hint", text: "Permissões: ler o Gmail (só leitura) e criar os eventos dos lembretes no Google Agenda. Ative também a Google Calendar API no mesmo projeto. Enquanto isso, use “Importar e-mail (.eml)” na aba Rascunhos." }),
     );
   } else if (!g.conectado) {
-    gmail.append(h("p", { text: "Configurado, ainda não conectado." }), h("a", { class: "file-button", href: "/api/gmail/conectar", text: "Conectar Google (Gmail só leitura + Agenda)" }));
+    oauth.append(h("p", { text: "Configurado, ainda não conectado." }), h("a", { class: "file-button", href: "/api/gmail/conectar", text: "Conectar Google (Gmail só leitura + Agenda)" }));
   } else {
     const notice = h("p", { class: "notice", role: "status" });
     gmail.append(
@@ -3895,6 +4008,7 @@ function setup() {
   setupAutoSearch();
   setupChat();
   setupLook();
+  setupBackground();
   const views = ["agora", "rascunhos", "linha", "kanban", "empresas", "busca", "vagas", "mensagens", "resultados", "curriculo", "perfil", "config"];
   const fallback = state.overlay ? "agora" : "rascunhos";
   const fromHash = () => {

@@ -11,7 +11,7 @@ import json
 import re
 from typing import Any, Callable
 
-from jobscout import places, suggest
+from jobscout import insights, places, replies, suggest
 from jobscout.activities import clean_space, fold
 
 MAX_EXAMPLES = 12
@@ -73,6 +73,8 @@ def prompt(fields: list[dict[str, Any]], profile_text: str, past: list[dict[str,
         options = f" Opções: {json.dumps(field['opcoes'], ensure_ascii=False)}" if field.get("opcoes") else ""
         kind = field.get("tipo") or "text"
         hint = " Só número inteiro; se não constar no currículo, 0." if kind == "number" else ""
+        if kind == "checkbox":
+            hint = " Pode escolher mais de uma opção, separadas por ponto e vírgula."
         if kind == "textarea":
             hint = " Resposta aberta: 2 a 5 frases em primeira pessoa, com fatos do currículo."
         if not field.get("opcoes") and kind != "number":
@@ -94,7 +96,13 @@ def _number(text: str) -> str:
     return str(int(float(match.group(0).replace(",", ".")))) if match else ""
 
 
-def parse(raw: str, fields: list[dict[str, Any]], model: str) -> list[dict[str, str]]:
+def _invents(answer: str, label: str, facts: str) -> bool:
+    """Resposta aberta com número ou ferramenta fora do perfil e do histórico: a IA inventou."""
+    known = {fold(name) for name in insights.skills(f"{facts} {label}")}
+    return bool(replies.invented_numbers(answer, [facts, label])) or any(fold(name) not in known for name in insights.skills(answer))
+
+
+def parse(raw: str, fields: list[dict[str, Any]], model: str, facts: str = "") -> list[dict[str, str]]:
     """Só as respostas que cabem no campo; o resto some calado."""
     try:
         data = json.loads(raw)
@@ -115,7 +123,13 @@ def parse(raw: str, fields: list[dict[str, Any]], model: str) -> list[dict[str, 
         if not field or not answer or suggest.SENSITIVE.search(fold(field["rotulo"])) or "[falta" in answer.lower():
             continue
         options = field.get("opcoes") or []
-        if options:
+        if options and field.get("tipo") == "checkbox":
+            # Várias opções podem valer: cada uma tem de existir no campo.
+            chosen = [index for index in (suggest.fit_text(part.strip(), options) for part in re.split(r"[;,]", answer)) if index >= 0]
+            if not chosen:
+                continue
+            answer = "; ".join(dict.fromkeys(options[index] for index in chosen))
+        elif options:
             index = suggest.fit_text(answer, options)
             if index < 0:
                 continue
@@ -130,6 +144,8 @@ def parse(raw: str, fields: list[dict[str, Any]], model: str) -> list[dict[str, 
             answer = number
         limit = field.get("max") or 0
         if limit and len(answer) > limit:
+            continue
+        if facts and not options and field.get("tipo") != "number" and _invents(answer, field["rotulo"], facts):
             continue
         answer = answer[:MAX_LONG_ANSWER if field.get("tipo") == "textarea" else MAX_ANSWER]
         # Sem dizer de onde tirou, é chute (ex.: "No" para uma skill que o currículo só não cita): não sugere.

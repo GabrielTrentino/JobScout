@@ -497,7 +497,8 @@ class JobSearch:
     def __init__(self, store: Any, hub: Any, load: Callable[[], dict[str, Any]], save: Callable[[dict[str, Any]], Any],
                  alerts: Callable[[], list[dict[str, Any]]] | None = None, opener: Callable[..., Any] = urlopen,
                  pause: float = PAUSE_SECONDS, profile: Callable[[], dict[str, Any]] | None = None,
-                 fit: Callable[[dict[str, Any]], int | None] | None = None) -> None:
+                 fit: Callable[[dict[str, Any]], int | None] | None = None,
+                 presets: Callable[[], list[dict[str, Any]]] | None = None) -> None:
         self.store = store
         self.hub = hub
         self.load = load
@@ -507,6 +508,7 @@ class JobSearch:
         self.pause = pause
         self.profile = profile or dict
         self.fit = fit or (lambda item: None)
+        self.presets = presets or list
         self._lock = threading.Lock()
         self._stop = threading.Event()
 
@@ -572,46 +574,37 @@ class JobSearch:
             raise SearchError("Já tem uma busca rodando.")
         try:
             config = clean_config(self.load())
-            if not (config["titulos"] or config["empresas"] or config["palavras"]):
+            # Na rodada sozinha, entram também os presets marcados "Buscar sozinho".
+            configs = [config] if config["titulos"] or config["empresas"] or config["palavras"] else []
+            if not manual:
+                configs += [clean_config(preset["config"]) for preset in self.presets() if preset.get("auto")]
+            if not configs:
                 raise SearchError("Diga o que procurar: títulos, empresas ou palavras.")
-            profile = self.profile() or {}
-            config["cidade"] = str(profile.get("cidade") or "")
-            config["pais_en"] = places.country(str(profile.get("pais") or ""), "en")
-            # Sem modelo marcado na busca, vale o que o Perfil aceita.
-            config["modelos"] = config["modelos"] or profile_modes(str(profile.get("modelos_trabalho") or ""))
             self.hub.activity("Busca de vagas: procurando…", "trabalhando")
             notes: list[str] = []
-            items: list[dict[str, Any]] = []
-            if config["fontes"]["gupy"]:
-                items += self._gupy(config, notes)
-            if config["fontes"]["himalayas"] and config["titulos"]:
-                items += self._himalayas(config, notes)
-            if config["fontes"]["inhire"] and config["inhire_empresas"]:
-                items += self._inhire(config, notes)
-            if config["fontes"]["ats"] and config["ats_empresas"]:
-                items += self._ats(config, notes)
-            if config["fontes"]["linkedin_email"] and self.alerts:
-                try:
-                    for message in self.alerts():
-                        items += parse_linkedin_alert(message)
-                except Exception as exc:  # noqa: BLE001 - o Gmail é uma das fontes, não pode parar as outras
-                    notes.append(f"Alertas do LinkedIn: {exc}")
+            new: list[dict[str, Any]] = []
+            looked = 0
+            alerts = self._alert_items(notes)
             saved_urls = {job["url"] for job in self.store.jobs()}
-            new = []
-            for item in items:
-                if item["url"] in saved_urls:
-                    continue
-                points, reasons = score(item, config)
-                if points < MIN_SCORE:
-                    continue
-                result_id = self.store.add_search_result({**item, "score": points, "reasons": reasons, "fit": self.fit(item)})
-                if result_id:
-                    new.append({**item, "id": result_id, "score": points})
+            for current in configs:
+                items = self._collect(current, notes)
+                if current["fontes"]["linkedin_email"]:
+                    items += alerts
+                looked += len(items)
+                for item in items:
+                    if item["url"] in saved_urls:
+                        continue
+                    points, reasons = score(item, current)
+                    if points < MIN_SCORE:
+                        continue
+                    result_id = self.store.add_search_result({**item, "score": points, "reasons": reasons, "fit": self.fit(item)})
+                    if result_id:
+                        new.append({**item, "id": result_id, "score": points})
             when = datetime.now().astimezone().isoformat(timespec="seconds")
             self.save({"ultima": when})
-            summary = {"em": when, "olhadas": len(items), "novas": len(new), "avisos": notes, "manual": manual}
+            summary = {"em": when, "olhadas": looked, "novas": len(new), "avisos": notes, "manual": manual, "buscas": len(configs)}
             level = "aviso" if new else "ok"
-            text = f"Busca de vagas: {len(new)} vaga(s) nova(s) que combinam, de {len(items)} olhada(s)."
+            text = f"Busca de vagas: {len(new)} vaga(s) nova(s) que combinam, de {looked} olhada(s)."
             if notes:
                 text += " " + " · ".join(notes[:3])
             self.hub.activity(text, level)
@@ -620,8 +613,36 @@ class JobSearch:
         finally:
             self._lock.release()
 
+    def _alert_items(self, notes: list[str]) -> list[dict[str, Any]]:
+        """Os e-mails de alerta são lidos uma vez por rodada: depois de lidos, não voltam."""
+        items: list[dict[str, Any]] = []
+        if self.alerts:
+            try:
+                for message in self.alerts():
+                    items += parse_linkedin_alert(message)
+            except Exception as exc:  # noqa: BLE001 - o Gmail é uma das fontes, não pode parar as outras
+                notes.append(f"Alertas do LinkedIn: {exc}")
+        return items
+
+    def _collect(self, config: dict[str, Any], notes: list[str]) -> list[dict[str, Any]]:
+        profile = self.profile() or {}
+        config["cidade"] = str(profile.get("cidade") or "")
+        config["pais_en"] = places.country(str(profile.get("pais") or ""), "en")
+        # Sem modelo marcado na busca, vale o que o Perfil aceita.
+        config["modelos"] = config["modelos"] or profile_modes(str(profile.get("modelos_trabalho") or ""))
+        items: list[dict[str, Any]] = []
+        if config["fontes"]["gupy"]:
+            items += self._gupy(config, notes)
+        if config["fontes"]["himalayas"] and config["titulos"]:
+            items += self._himalayas(config, notes)
+        if config["fontes"]["inhire"] and config["inhire_empresas"]:
+            items += self._inhire(config, notes)
+        if config["fontes"]["ats"] and config["ats_empresas"]:
+            items += self._ats(config, notes)
+        return items
+
     def next_run(self, config: dict[str, Any]) -> datetime | None:
-        if not config["ativo"]:
+        if not config["ativo"] and not any(preset.get("auto") for preset in self.presets()):
             return None
         if not config.get("ultima"):
             return datetime.now().astimezone()

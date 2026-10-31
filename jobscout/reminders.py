@@ -8,8 +8,9 @@ da intenção (aba Mensagens); "Feito" passa para a próxima ocorrência, e a va
 from __future__ import annotations
 
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
+from urllib.parse import urlencode
 
 from jobscout.activities import clean_space
 from jobscout.config import setting
@@ -104,6 +105,44 @@ def calendar_event(reminder: dict[str, Any], link: str = "") -> dict[str, Any]:
     return event
 
 
+def _utc(moment: datetime) -> str:
+    return moment.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def _rule(reminder: dict[str, Any]) -> str:
+    if reminder["every_days"] and reminder["remaining"] > 1:
+        return f"RRULE:FREQ=DAILY;INTERVAL={reminder['every_days']};COUNT={reminder['remaining']}"
+    return ""
+
+
+def calendar_link(reminder: dict[str, Any]) -> str:
+    """Link que abre o Google Agenda com o evento pronto: um clique em Salvar, sem API nem projeto no Google."""
+    start = datetime.fromisoformat(reminder["next_at"])
+    fields = {
+        "action": "TEMPLATE", "text": reminder["title"], "dates": f"{_utc(start)}/{_utc(start + timedelta(minutes=30))}",
+        "details": calendar_event(reminder)["description"], "ctz": timezone_name(),
+    }
+    if _rule(reminder):
+        fields["recur"] = _rule(reminder)
+    return "https://calendar.google.com/calendar/render?" + urlencode(fields)
+
+
+def ics(reminder: dict[str, Any]) -> str:
+    """Arquivo .ics para Outlook, Apple e qualquer agenda."""
+    start = datetime.fromisoformat(reminder["next_at"])
+    escape = lambda text: str(text).replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace("\n", "\\n")  # noqa: E731
+    lines = [
+        "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//JobScout//PT", "BEGIN:VEVENT",
+        f"UID:jobscout-{reminder['id']}@local", f"DTSTAMP:{_utc(datetime.now().astimezone())}",
+        f"DTSTART:{_utc(start)}", f"DTEND:{_utc(start + timedelta(minutes=30))}",
+        f"SUMMARY:{escape(reminder['title'])}", f"DESCRIPTION:{escape(calendar_event(reminder)['description'])}",
+    ]
+    if _rule(reminder):
+        lines.append(_rule(reminder))
+    lines += ["BEGIN:VALARM", "ACTION:DISPLAY", "TRIGGER:PT0M", f"DESCRIPTION:{escape(reminder['title'])}", "END:VALARM", "END:VEVENT", "END:VCALENDAR"]
+    return "\r\n".join(lines) + "\r\n"
+
+
 class Reminders:
     """Guarda, avisa e espelha no Google Agenda. A agenda é opcional: sem ela, tudo segue local."""
 
@@ -171,6 +210,11 @@ class Reminders:
         elif action == "adiar":
             later = max(datetime.fromisoformat(reminder["next_at"]), datetime.now().astimezone()) + timedelta(days=1)
             self.store.update_reminder(reminder_id, next_at=later.isoformat(timespec="minutes"), notified_at=None)
+            if reminder.get("calendar_id"):
+                # O evento acompanha o adiamento: sai o antigo, entra um na data nova, com a repetição que falta.
+                self._drop_event(reminder)
+                self.store.update_reminder(reminder_id, calendar_id="")
+                self._push(reminder_id)
         elif action == "parar":
             self.store.update_reminder(reminder_id, state="parado")
             self._drop_event(reminder)
@@ -178,6 +222,29 @@ class Reminders:
             raise ValueError("Ação inválida: use feito, adiar ou parar.")
         self.hub.publish("lembretes")
         return self.store.reminder(reminder_id)
+
+    def sync_stages(self, job_id: int, stages: list[dict[str, Any]]) -> None:
+        """Etapa com data marcada vira lembrete (e evento, com a agenda ligada) na hora marcada."""
+        now_at = datetime.now().astimezone()
+        current = {row["intent"]: row for row in self.store.reminders(job_id) if row["intent"].startswith("etapa:")}
+        wanted = {}
+        for stage in stages:
+            if not stage.get("scheduled_at") or stage["state"] in {"feita", "pulada"}:
+                continue
+            try:
+                moment = _when(stage["scheduled_at"])
+            except ValueError:
+                continue
+            if moment > now_at:
+                wanted[f"etapa:{stage['name']}"[:40]] = (stage["name"], moment.isoformat(timespec="minutes"))
+        for key, row in current.items():
+            if key not in wanted or wanted[key][1] != row["next_at"]:
+                self.store.update_reminder(row["id"], state="parado")
+                self._drop_event(row)
+                current[key] = None
+        for key, (name, moment) in wanted.items():
+            if not current.get(key):
+                self.create({"vaga_id": job_id, "titulo": f"{name}: {{vaga}}", "quando": moment, "intencao": key, "cada_dias": 0, "vezes": 1})
 
     def stop_for_job(self, job_id: int, why: str) -> int:
         stopped = 0

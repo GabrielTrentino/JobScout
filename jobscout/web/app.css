@@ -1563,6 +1563,10 @@ body.overlay.mode-painel .chat-layout { grid-template-columns: 1fr; height: auto
 /* Aparência */
 .avatar-custom { width: 58px; height: 58px; object-fit: contain; }
 
+a.ghost.file-button { font-size: 0.82rem; padding: 0.25rem 0.55rem; }
+
+.salary-convert { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+
 .avatar-grid { display: grid; gap: 0.4rem; margin: 0.4rem 0; }
 
 pre.code { max-height: 16rem; overflow: auto; padding: 0.5rem; background: var(--sunken); border-radius: var(--radius-sm); font-size: 0.8rem; }

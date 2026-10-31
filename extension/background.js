@@ -174,6 +174,12 @@ async function handle(message) {
       return call("/api/extensao/chat", { json: message.dados });
     case "chat_link":
       return call("/api/extensao/chat/vincular", { json: message.dados });
+    case "chat_record":
+      return call("/api/extensao/chat/registrar", { json: message.dados });
+    case "resumes":
+      return call("/api/extensao/curriculos", { json: { url: message.url } });
+    case "resume_pdf":
+      return call("/api/extensao/curriculo-pdf", { json: { versao: message.versao } });
     case "chat_approach":
       return call("/api/extensao/chat/abordagem", { json: message.dados });
     case "reply":

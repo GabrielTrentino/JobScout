@@ -373,6 +373,10 @@ class Store:
                 reached.setdefault(row["job_id"], set()).add(target)
         return reached
 
+    def chat_returns(self) -> set[int]:
+        """Vagas em que o recrutador respondeu no chat: contam como retorno."""
+        return {row["job_id"] for row in self._all("SELECT DISTINCT job_id FROM movements WHERE kind = 'chat_retorno' AND job_id IS NOT NULL")}
+
     def application_id(self, job_id: int) -> int | None:
         row = self._one("SELECT id FROM applications WHERE job_id = ?", (job_id,))
         return int(row["id"]) if row else None

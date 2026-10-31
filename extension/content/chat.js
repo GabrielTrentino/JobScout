@@ -180,6 +180,16 @@
     insert.addEventListener("click", () => {
       adapter.insert(composer, output.value, subject.value);
       status.textContent = "Inserida. Revise na caixa de mensagem e envie você mesmo.";
+      // Fica registrada na vaga; mensagem do recrutador na conversa conta como retorno.
+      const job = jobSelect.value || (state.context && state.context.vaga_sugerida ? state.context.vaga_sugerida.id : "");
+      if (job) {
+        const convo = adapter.read(composer);
+        send({ kind: "chat_record", dados: {
+          vaga_id: Number(job), canal: adapter.canal, texto: output.value, intencao: state.intent,
+          contato_id: state.context.recrutador ? state.context.recrutador.id : null,
+          recebeu: convo.turnos.some((turn) => !turn.minha),
+        } });
+      }
     });
     return host;
   }

@@ -74,7 +74,7 @@
       <button type="button" class="icon pin" data-pin title="Sempre por cima" aria-pressed="true">📌</button>
       <button type="button" class="icon" id="ov-wide" title="Expandir (cobrir mais tela)">⇔</button>
       <button type="button" class="icon" data-browser title="Abrir painel completo no navegador">⤢</button>
-      <button type="button" class="icon" data-close title="Fechar o JobScout">×</button>
+      <button type="button" class="icon" data-close title="Esconder nos ícones ocultos (continua rodando)">×</button>
     </div>
   </div>
 
@@ -431,6 +431,12 @@
         </div>
         <div class="cvtab" data-cvpanel="versoes" hidden>
           <article class="sheet">
+            <h2 class="tab">Modelos padrão</h2>
+            <p class="hint">Cópias do currículo completo para usar em várias vagas (ex.: “Dados”, “BI”). Edite cada uma à parte e anexe ou registre pelo nome.</p>
+            <div class="row">
+              <input id="cvv-model" placeholder="Nome do modelo" aria-label="Nome do modelo" maxlength="80">
+              <button type="button" class="ghost" id="cvv-model-new">Criar modelo</button>
+            </div>
             <h2 class="tab">Nova versão para uma vaga</h2>
             <p class="hint">Coloca primeiro as habilidades e os itens de experiência que combinam com a vaga e esconde o resto (nada é apagado do completo). Com a IA ligada, o resumo também é reescrito para a vaga, só com fatos do seu currículo.</p>
             <div class="row">
@@ -512,6 +518,12 @@
             <p class="notice" id="theme-notice" role="status"></p>
           </article>
           <article class="sheet">
+            <h2 class="tab">Segundo plano</h2>
+            <p class="hint">O × esconde o JobScout nos ícones ocultos da barra de tarefas (setinha ao lado do relógio) e ele continua trabalhando. Clique no ícone para voltar; com o botão direito há Abrir, Painel e Sair.</p>
+            <label class="check"><input type="checkbox" id="bg-hidden"> Abrir já escondido nos ícones ocultos</label>
+            <label class="check"><input type="checkbox" id="bg-autostart"> Iniciar junto com o Windows</label>
+          </article>
+          <article class="sheet">
             <h2 class="tab">Personagem</h2>
             <p class="hint" id="avatar-state">Boneco padrão do JobScout.</p>
             <div class="avatar-grid">
@@ -549,8 +561,17 @@
           <article class="sheet">
             <h2 class="tab">Gmail</h2>
             <div id="gmail"></div>
-            <details class="tutorial"><summary>Como conectar o Gmail, passo a passo</summary>
-              <p class="hint">É o login do Google (“Entrar com o Google”): você autoriza uma vez e o JobScout lê os e-mails pela API do Gmail. O Gmail não precisa ficar aberto; basta o JobScout estar ligado. A senha nunca passa por aqui.</p>
+            <details class="tutorial"><summary>Como criar a senha de app do Gmail</summary>
+              <ol>
+                <li>Na conta Google, ligue a <a href="https://myaccount.google.com/signinoptions/twosv" target="_blank" rel="noopener">verificação em duas etapas</a>.</li>
+                <li>Abra <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">Senhas de app</a>, escreva “JobScout” e clique em Criar.</li>
+                <li>Copie as 16 letras, cole acima com o seu e-mail e clique em Conectar.</li>
+              </ol>
+              <p class="hint">Sem projeto no Google Cloud. O JobScout abre a caixa só para leitura, e o Gmail não precisa ficar aberto. A senha fica cifrada neste computador, e você pode revogá-la na mesma página do Google. Mudar a senha da conta também a invalida.</p>
+            </details>
+            <details class="tutorial"><summary>Alternativa avançada: login do Google com projeto próprio</summary>
+              <p class="hint">Só é preciso para criar eventos direto na agenda. Sem isso, os lembretes têm o botão “Agenda”, que abre o evento pronto no Google Agenda.</p>
+              <div id="gmail-oauth"></div>
               <ol>
                 <li>Abra <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a> e crie um projeto (ex.: JobScout).</li>
                 <li>Em “APIs e serviços &gt; Biblioteca”, ative a <strong>Gmail API</strong> e a <strong>Google Calendar API</strong>.</li>

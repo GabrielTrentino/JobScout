@@ -280,6 +280,7 @@
 
   function hasAnswer(element, info) {
     if (info.type === "buttons") return Boolean(chosenButton(element));
+    if (info.type === "checkboxes") return [...element.querySelectorAll("input[type='checkbox']")].some((box) => box.checked);
     if (info.type === "radio") {
       const group = groupOf(element);
       return Boolean(group && [...group.querySelectorAll("input[type='radio']")].some((radio) => radio.checked));
@@ -317,6 +318,11 @@
       if (!button) return false;
       button.click();
       item.target.dataset.jobscoutEscolha = value;
+    } else if (item.info.type === "checkboxes") {
+      const wanted = value.split(";").map((part) => part.trim());
+      const boxes = [...item.target.querySelectorAll("input[type='checkbox']")].filter((box) => wanted.includes(core.cleanLabel(labelFor(box))));
+      if (!boxes.length) return false;
+      for (const box of boxes) if (!box.checked) box.click();
     } else if (item.tipo === "radio") {
       const radios = [...item.target.querySelectorAll("input[type='radio']")];
       const index = radios.findIndex((radio) => core.cleanLabel(labelFor(radio)) === value);
@@ -330,9 +336,101 @@
       item.element.dispatchEvent(new Event("change", { bubbles: true }));
     } else {
       setValue(item.element, value);
+      if (isListField(item.element)) pickFromList(item.element, value);
     }
     markFilled(item.target);
     return true;
+  }
+
+  // Lista com busca (Location da Ashby, por exemplo): digitar só filtra; é preciso escolher a opção.
+  function isListField(element) {
+    return element.getAttribute("role") === "combobox" || element.hasAttribute("aria-autocomplete") || /start typing|comece a digitar/i.test(element.placeholder || "");
+  }
+
+  async function pickFromList(element, value) {
+    const words = core.fold(value).split(",").map((part) => part.trim()).filter(Boolean);
+    element.focus();
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      const options = [...document.querySelectorAll("[role='option']")].filter((node) => node.offsetParent !== null);
+      if (!options.length) continue;
+      const score = (node) => words.filter((word) => core.fold(text(node)).includes(word)).length;
+      const best = options.reduce((top, node) => (score(node) > score(top) ? node : top), options[0]);
+      if (score(best)) {
+        best.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+        best.click();
+        element.blur();
+      }
+      return;
+    }
+  }
+
+  // Anexar o currículo: o PDF vem do JobScout e só entra no campo no clique em Anexar.
+  const RESUME_FILE = /resume|curr[ií]culo|\bcv\b/i;
+
+  function fileQuestion(input) {
+    return core.cleanLabel(labelFor(input)) || input.getAttribute("aria-label") || input.name || input.id || "";
+  }
+
+  async function offerResume(root, job) {
+    for (const input of root.querySelectorAll("input[type='file']")) {
+      if (input.dataset.jobscoutAnexo || input.files.length || !RESUME_FILE.test(fileQuestion(input))) continue;
+      input.dataset.jobscoutAnexo = "1";
+      const response = await send({ kind: "resumes", url: job ? job.url : "" });
+      const choices = (response && response.curriculos) || [];
+      if (choices.length) showResumeChip(input, choices);
+    }
+  }
+
+  function showResumeChip(input, choices) {
+    const host = document.createElement("span");
+    host.dataset.jobscoutSugestao = "1";
+    const root = host.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+    style.textContent = CHIP_STYLE + " select{font:13px 'Segoe UI',system-ui,sans-serif;max-width:60%}";
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    const label = document.createElement("span");
+    label.textContent = "Currículo:";
+    const select = document.createElement("select");
+    select.setAttribute("aria-label", "Currículo para anexar");
+    for (const choice of choices) {
+      const option = document.createElement("option");
+      option.value = String(choice.versao);
+      option.textContent = choice.nome;
+      select.append(option);
+    }
+    const use = document.createElement("button");
+    use.type = "button";
+    use.className = "use";
+    use.textContent = "Anexar";
+    const note = document.createElement("span");
+    note.className = "base";
+    use.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      use.disabled = true;
+      note.textContent = "Gerando o PDF…";
+      const file = await send({ kind: "resume_pdf", versao: Number(select.value) });
+      if (!file || file.erro) {
+        note.textContent = (file && file.erro) || "O JobScout não respondeu.";
+        use.disabled = false;
+        return;
+      }
+      const bytes = Uint8Array.from(atob(file.base64), (letter) => letter.charCodeAt(0));
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([bytes], file.nome, { type: "application/pdf" }));
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      collectedDocs.add(file.nome);
+      note.textContent = `Anexado: ${file.nome}`;
+      use.disabled = false;
+    });
+    chip.append(label, select, use, note);
+    root.append(style, chip);
+    (input.closest(adapter.fieldGroup) || input.parentElement).appendChild(host);
   }
 
   const CHIP_STYLE = `
@@ -608,11 +706,29 @@
         const value = core.standardValue(standard, info.label, document.documentElement.lang);
         if (settings.autofill !== false && value && !element.value && !element.dataset.jobscoutPreenchido) {
           setValue(element, value);
+          if (isListField(element)) pickFromList(element, value);
           markFilled(element);
         }
         continue;
       }
       if (settings.autofill !== false && fillFromHistory(element, info)) continue;
+      // Grupo de caixas ("Quais ferramentas você usa?"): uma pergunta só, com várias respostas possíveis.
+      if (adapter.suggestAll && info.type === "checkbox") {
+        const group = groupOf(element);
+        const boxes = group ? [...group.querySelectorAll("input[type='checkbox']")].filter(visible) : [];
+        const question = group ? core.cleanLabel(questionFor(element)) : "";
+        if (boxes.length >= 2 && question && !CONSENT.test(question) && !group.dataset.jobscoutSugerido && settings.sugestoes !== false) {
+          const groupInfo = { tag: "div", type: "checkboxes", label: question };
+          if (!hasAnswer(group, groupInfo)) {
+            group.dataset.jobscoutSugerido = "1";
+            candidates.push({
+              campo: fieldId(group), rotulo: question, tipo: "checkbox", max: 0,
+              opcoes: boxes.map((box) => core.cleanLabel(labelFor(box))), element: group, target: group, info: groupInfo,
+            });
+          }
+        }
+        continue;
+      }
       const target = info.type === "radio" ? groupOf(element) : element;
       // Consentimento (SMS, WhatsApp, termos, privacidade) é escolha da pessoa: sem sugestão.
       const consent = CONSENT.test(core.cleanLabel(questionFor(element)));
@@ -647,6 +763,7 @@
       }
     }
     const job = adapter.currentJob();
+    if (adapter.suggestAll) await offerResume(root, job);
     const toDrafts = (list) => list.filter((question) => !withSuggestion.has(question.campo)).map(({ rotulo, campo }) => ({ rotulo, campo }));
     // 1) Regras: Perfil, currículo e histórico. 2) Texto longo vai direto para o rascunho no painel.
     await suggestFor(candidates.filter((item) => item.rotulo));

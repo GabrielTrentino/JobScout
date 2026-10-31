@@ -57,6 +57,10 @@ class Preferences:
             "busca_presets": stored.get("busca_presets") if isinstance(stored.get("busca_presets"), list) else [],
             "google_cliente": str(stored.get("google_cliente") or "").strip(),
             "google_chave": str(stored.get("google_chave") or "").strip(),
+            "imap_email": str(stored.get("imap_email") or "").strip(),
+            "imap_senha": str(stored.get("imap_senha") or ""),
+            "imap_servidor": str(stored.get("imap_servidor") or "").strip(),
+            "iniciar_oculto": bool(stored.get("iniciar_oculto")),
             "tema": stored.get("tema") if isinstance(stored.get("tema"), dict) else None,
         }
 
@@ -119,11 +123,13 @@ class Preferences:
                 if name:
                     config = jobsearch.clean_config(item.get("config"))
                     config.pop("ultima", None)
-                    presets.append({"nome": name, "config": config})
+                    presets.append({"nome": name, "config": config, "auto": bool(item.get("auto"))})
             current["busca_presets"] = presets[:30]
-        for key in ("google_cliente", "google_chave"):
+        for key in ("google_cliente", "google_chave", "imap_email", "imap_senha", "imap_servidor"):
             if key in data:
                 current[key] = str(data.get(key) or "").strip()
+        if "iniciar_oculto" in data:
+            current["iniciar_oculto"] = bool(data["iniciar_oculto"])
         if "tema" in data:
             from jobscout import appearance
 

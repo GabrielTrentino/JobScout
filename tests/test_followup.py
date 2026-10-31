@@ -1,5 +1,6 @@
 """Acompanhamento: etapas por empresa, lembretes com agenda, busca automática, e-mails e abordagens no chat."""
 
+import imaplib
 import json
 import os
 import unittest
@@ -10,7 +11,9 @@ from unittest import mock
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
-from jobscout import appearance, approach, cv, jobsearch, llm, mail, pipeline, reminders, replies
+from jobscout import appearance, approach, cv, imap_mail, jobsearch, llm, mail, pipeline, reminders, replies
+from jobscout.gmail import GmailError
+from jobscout.preferences import Preferences
 from jobscout.linkedin_public import PublicPageError
 from jobscout.server import App, serve_in_background
 
@@ -251,7 +254,7 @@ class ServerTest(unittest.TestCase):
         self.app.store.update_reminder(created["id"], next_at=past)
         self.app.reminders.check()
         self.assertEqual(self.app.store.reminder(created["id"])["state"], "parado")
-        self.assertEqual(calendar.deleted, ["ev1"])
+        self.assertEqual(calendar.deleted, ["ev1", "ev2"])  # adiar refaz o evento; parar apaga o novo
         with self.assertRaises(HTTPError) as caught:
             self.call("POST", "/api/lembretes", {"titulo": "x", "quando": "amanhã"})
         self.assertEqual(caught.exception.code, 422)
@@ -370,6 +373,51 @@ class ServerTest(unittest.TestCase):
         self.assertTrue(self.app.gmail.configured())
         self.assertIs(self.call("GET", "/api/preferencias")["google_chave"], True)  # a chave não volta para o painel
 
+    def test_presets_models_stage_dates_and_chat_record(self):
+        job = self.job()
+        self.call("PUT", f"/api/vagas/{job['id']}/etapas", {"etapas": [
+            {"nome": "Currículo enviado", "tipo": "candidatado", "estado": "atual"},
+            {"nome": "Teste técnico", "tipo": "em_analise", "quando": "2030-01-10T14:00"}]})
+        titles = [row["title"] for row in self.call("GET", f"/api/lembretes?vaga={job['id']}")["lembretes"]]
+        self.assertEqual(titles, ["Teste técnico: Data Engineer — Acme"])
+        self.call("PUT", f"/api/vagas/{job['id']}/etapas", {"etapas": [
+            {"nome": "Currículo enviado", "tipo": "candidatado", "estado": "atual"},
+            {"nome": "Teste técnico", "tipo": "em_analise", "quando": "2030-01-11T14:00"}]})
+        rows = self.call("GET", f"/api/lembretes?vaga={job['id']}")["lembretes"]
+        self.assertEqual(len(rows), 1)  # data nova troca o lembrete, não duplica
+        self.assertTrue(rows[0]["next_at"].startswith("2030-01-11"))
+        self.assertIn("calendar.google.com", rows[0]["agenda_link"])
+        self.assertIn("BEGIN:VCALENDAR", self.call("GET", f"/api/lembretes/{rows[0]['id']}/agenda.ics"))
+
+        self.call("PUT", "/api/curriculo/completo", {"cv": {"titulo": "Eng", "experiencias": [{"cargo": "Dados", "itens": ["x"]}]}})
+        model = self.call("POST", "/api/curriculo/versoes", {"modelo": "Dados"})
+        self.assertIsNone(model["job_id"])
+        with self.assertRaises(HTTPError):
+            self.call("POST", "/api/curriculo/versoes", {"modelo": "Dados"})
+        options = self.call("POST", "/api/extensao/curriculos", {"url": job["url"]}, headers=EXT)["curriculos"]
+        self.assertEqual([item["nome"] for item in options], ["Padrão: Dados", "Currículo completo"])
+        marked = self.call("POST", f"/api/vagas/{job['id']}/curriculo", {"documento": "Dados"})
+        self.assertEqual(marked["curriculo"], {"tipo": "Padrão", "nome": "Dados"})
+
+        self.assertFalse(self.call("GET", "/api/resultados")[0]["retorno"])
+        recorded = self.call("POST", "/api/extensao/chat/registrar", {"vaga_id": job["id"], "canal": "linkedin", "texto": "Obrigado!", "intencao": "interesse", "recebeu": True}, headers=EXT)
+        self.assertTrue(recorded["registrado"])
+        self.assertEqual(self.call("GET", f"/api/vagas/{job['id']}")["mensagens"][0]["body"], "Obrigado!")
+        self.assertTrue(self.call("GET", "/api/resultados")[0]["retorno"])
+
+        calls = []
+        self.app.search._gupy = lambda config, notes: calls.append(config["titulos"]) or []
+        self.app.search.pause = 0
+        self.call("PUT", "/api/busca/config", {"titulos": ["Data Engineer"], "fontes": {"himalayas": False}})
+        self.call("PUT", "/api/busca/presets", {"presets": [
+            {"nome": "A", "auto": True, "config": {"titulos": ["BI Analyst"], "fontes": {"himalayas": False}}},
+            {"nome": "B", "config": {"titulos": ["Nunca"], "fontes": {"himalayas": False}}}]})
+        self.app.search.run()
+        self.assertEqual(calls, [["Data Engineer"], ["BI Analyst"]])  # só o preset marcado entra sozinho
+        calls.clear()
+        self.app.search.run(manual=True)
+        self.assertEqual(calls, [["Data Engineer"]])
+
     def test_email_style_is_separate(self):
         chat = self.call("GET", "/api/mensagens/estilo")
         email = self.call("GET", "/api/mensagens/estilo?canal=email")
@@ -428,10 +476,12 @@ class ImprovementsTest(unittest.TestCase):
             self.assertEqual(cv.ai_item("Fiz pipelines em Airflow", {"cargo": "Dados"})["texto"], "Construí pipelines em Airflow")
 
     def test_resume_kind(self):
-        versions = [{"name": "Data_Engineer_Acme", "label": "Data_Engineer_Acme", "pdf": "CV Ana - Data_Engineer_Acme.pdf"}]
+        versions = [{"name": "Data_Engineer_Acme", "label": "Data_Engineer_Acme", "pdf": "CV Ana - Data_Engineer_Acme.pdf", "job_id": 3},
+                    {"name": "Dados", "label": "Dados", "pdf": "CV Ana - Dados.pdf", "job_id": None}]
         self.assertEqual(cv.custom_label({"title": "Data Engineer Sr", "company": "Acme Inc."}), "Data_Engineer_Sr_Acme_Inc")
         self.assertEqual(cv.resume_kind("CV Ana - Data_Engineer_Acme.pdf", versions), {"tipo": "Customizado", "nome": "Data_Engineer_Acme"})
         self.assertEqual(cv.resume_kind("Curriculo_modelo_x.pdf", versions), {"tipo": "Padrão", "nome": "Curriculo_modelo_x"})
+        self.assertEqual(cv.resume_kind("CV Ana - Dados.pdf", versions), {"tipo": "Padrão", "nome": "Dados"})
         self.assertEqual(cv.resume_kind("", versions)["tipo"], "")
 
     def test_theme_and_avatar_validation(self):
@@ -448,7 +498,74 @@ class ImprovementsTest(unittest.TestCase):
         self.assertEqual(appearance.clean_avatar({"idle": "data:image/gif;base64,AAAA"}), {"idle": "data:image/gif;base64,AAAA"})
 
 
+class FakeImap:
+    instances = []
+
+    def __init__(self, host):
+        self.host, self.calls = host, []
+        FakeImap.instances.append(self)
+
+    def login(self, email, password):
+        if password != "abcdefghijklmnop":
+            raise imaplib.IMAP4.error("AUTHENTICATIONFAILED")
+
+    def select(self, box, readonly=False):
+        self.readonly = readonly
+
+    def uid(self, command, *args):
+        self.calls.append((command, args))
+        if command == "SEARCH":
+            return "OK", [b"7 9"]
+        return "OK", [(b"9 (BODY[] {5}", b"Subject: Oi\r\n\r\ncorpo"), b")"]
+
+    def logout(self):
+        pass
+
+
+class ImapTest(unittest.TestCase):
+    def setUp(self):
+        FakeImap.instances = []
+        self.folder = TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.prefs = Preferences(Path(self.folder.name) / "p.json")
+        self.mail = imap_mail.ImapMail(self.prefs.load, self.prefs.save, connector=FakeImap)
+
+    def test_app_password_login_read_only_and_cipher(self):
+        with self.assertRaises(GmailError):
+            self.mail.connect("ana@gmail.com", "errada")
+        self.assertFalse(self.mail.connected())
+        self.mail.connect("ana@gmail.com", "abcd efgh ijkl mnop")
+        stored = self.prefs.load()
+        self.assertEqual(stored["imap_servidor"], "imap.gmail.com")
+        self.assertNotIn("abcdefghijklmnop", stored["imap_senha"])
+        self.assertEqual(imap_mail.reveal(stored["imap_senha"]), "abcdefghijklmnop")
+        found = self.mail.fetch_new(lambda key: key == "imap-9" and False, limit=1)
+        client = FakeImap.instances[-1]
+        self.assertTrue(client.readonly)
+        self.assertEqual(client.calls[0][1][1], "X-GM-RAW")
+        self.assertIn("newer_than:3d", client.calls[0][1][2])
+        self.assertEqual(client.calls[1][1][1], "(BODY.PEEK[])")  # não marca como lido
+        self.assertEqual(found[0][0], "imap-9")
+        self.assertEqual(self.mail.fetch_new(lambda key: True), [])
+        self.mail.disconnect()
+        self.assertFalse(self.mail.connected())
+
+    def test_other_servers_use_plain_criteria(self):
+        self.assertEqual(imap_mail._criteria("newer_than:7d", False)[0], "SINCE")
+        self.assertEqual(imap_mail.server_for("ana@yahoo.com.br"), "imap.mail.yahoo.com")
+
+
 class ReminderUnitTest(unittest.TestCase):
+    def test_calendar_link_and_ics_without_any_api(self):
+        reminder = {"id": 7, "title": "Cobrar retorno: Dados, Acme", "next_at": "2026-11-06T09:00-03:00", "every_days": 7, "remaining": 3, "notes": ""}
+        link = reminders.calendar_link(reminder)
+        self.assertIn("action=TEMPLATE", link)
+        self.assertIn("20261106T120000Z", link)
+        self.assertIn("recur=RRULE", link)
+        text = reminders.ics(reminder)
+        self.assertIn("RRULE:FREQ=DAILY;INTERVAL=7;COUNT=3", text)
+        self.assertIn("SUMMARY:Cobrar retorno: Dados\\, Acme", text)
+
     def test_clean_and_event(self):
         with self.assertRaises(ValueError):
             reminders.clean({"titulo": "x", "quando": "2026-11-01", "cada_dias": 200}, None)

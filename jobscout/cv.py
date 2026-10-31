@@ -604,5 +604,6 @@ def resume_kind(documents: str, versions: list[dict[str, Any]]) -> dict[str, str
     for version in versions:
         names = {fold(str(version.get(key) or "")) for key in ("pdf", "name", "label")}
         if wanted in names or wanted == fold(f"{version.get('label') or ''}.pdf"):
-            return {"tipo": "Customizado", "nome": version.get("label") or version.get("name") or document}
+            kind = "Customizado" if version.get("job_id") else "Padrão"
+            return {"tipo": kind, "nome": version.get("label") or version.get("name") or document}
     return {"tipo": "Padrão", "nome": re.sub(r"\.(pdf|docx?|odt|rtf)$", "", document, flags=re.I)}

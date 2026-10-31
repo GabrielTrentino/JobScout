@@ -52,6 +52,11 @@ class PeriodTest(unittest.TestCase):
 
 
 class SuggestTest(unittest.TestCase):
+    def test_tool_checkboxes_follow_the_resume(self):
+        profile = {"curriculo": "Pipelines em Python e Airflow"}
+        found = suggest.suggest("Which tools have you used?", profile, options=["Python", "Airflow", "COBOL", "Excel"], kind="checkbox")
+        self.assertEqual(found["valor"], "Python; Airflow")
+
     def test_salary_in_real_and_dollar(self):
         both = {"pretensao_salarial": "R$ 15.000 CLT", "pretensao_usd": "US$ 4,000/mês"}
         self.assertEqual(suggest.suggest("Qual sua pretensão salarial?", both)["valor"], "R$ 15.000 CLT")

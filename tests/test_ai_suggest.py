@@ -118,7 +118,7 @@ class AssistantAITest(unittest.TestCase):
     def test_without_model_it_says_so_and_skips(self):
         self.assertEqual(self.app.assistant.ai_suggestions(FIELDS), {"ia": False, "sugestoes": []})
 
-    def test_with_model_it_asks_once_and_filters(self):
+    def test_with_model_it_filters_and_retries_what_was_skipped(self):
         llm.configure("ollama:gemma3:4b")
         reply = json.dumps({"respostas": [{"campo": "js-1", "resposta": "Sim", "base": "perfil"}]})
         with mock.patch("jobscout.llm.ask_llm", return_value=reply) as ask:
@@ -126,8 +126,7 @@ class AssistantAITest(unittest.TestCase):
                                                        {"url": "https://example.com/vaga", "title": "Dev", "company": "Acme"})
         self.assertTrue(result["ia"])
         self.assertEqual([item["valor"] for item in result["sugestoes"]], ["Sim"])
-        ask.assert_called_once()
-        prompt = ask.call_args.args[1]
+        prompt = ask.call_args_list[0].args[1]
         self.assertNotIn("gênero", prompt)
         self.assertTrue(ask.call_args.kwargs["as_json"])
 
@@ -164,6 +163,20 @@ class FormLanguageTest(unittest.TestCase):
         self.assertIn("Responda em português", text)
         raw = json.dumps({"respostas": [{"campo": "a", "resposta": "x" * 900, "base": "currículo"}]})
         self.assertEqual(len(ai_suggest.parse(raw, fields, "m")[0]["valor"]), 900)
+
+    def test_open_answers_cannot_invent_tools_or_numbers(self):
+        fields = [{"campo": "a", "rotulo": "Tell me about a project", "tipo": "textarea"}]
+        facts = "Construí pipelines em Python e reduzi 30% do custo"
+        good = json.dumps({"respostas": [{"campo": "a", "resposta": "Construí pipelines em Python e reduzi 30% do custo.", "base": "currículo"}]})
+        self.assertEqual(len(ai_suggest.parse(good, fields, "m", facts)), 1)
+        for bad in ("Usei Kafka nos pipelines.", "Reduzi 75% do custo com Python."):
+            raw = json.dumps({"respostas": [{"campo": "a", "resposta": bad, "base": "currículo"}]})
+            self.assertEqual(ai_suggest.parse(raw, fields, "m", facts), [])
+
+    def test_checkbox_group_accepts_several_options(self):
+        fields = [{"campo": "a", "rotulo": "Which tools?", "tipo": "checkbox", "opcoes": ["Python", "SQL", "Excel"]}]
+        raw = json.dumps({"respostas": [{"campo": "a", "resposta": "Python; SQL", "base": "currículo"}]})
+        self.assertEqual(ai_suggest.parse(raw, fields, "m")[0]["valor"], "Python; SQL")
 
 
 if __name__ == "__main__":

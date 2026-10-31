@@ -109,6 +109,7 @@ A tela Currículo junta o texto do currículo (antes no Perfil) e o que sai dele
 - Formação separada em Graduação e Pós-graduação (`tipo`; deduzido do nome do curso quando não informado: pós, especialização, MBA, mestrado, doutorado).
 - "✨ Melhorar" em cada item pede à IA (tarefa "curriculo") uma reescrita em primeira pessoa, só com o assunto e os fatos do item. Número ou ferramenta que não está no item descarta a sugestão. A pessoa clica em Usar.
 - "Conferir habilidades" (`POST /api/curriculo/conferir`) compara o que está na tela: habilidades das experiências fora do perfil (botão "+ Perfil") e habilidades do perfil em nenhuma experiência ("Citar em…").
+- Modelos padrão são versões sem vaga, com nome próprio (`POST /api/curriculo/versoes` com `modelo`). Em `cv.resume_kind` contam como Padrão.
 - Versões por vaga são nomeadas `cargo_empresa` (`cv.custom_label`), e o PDF também. O currículo enviado é classificado (`cv.resume_kind`) em Customizado (bate com uma versão) ou Padrão (nome do arquivo); no detalhe da vaga dá para marcar à mão. Resultados mostra o tipo e compara por tipo.
 
 - O editor completo ([jobscout/cv.py](../jobscout/cv.py)) guarda a estrutura em `profile["cv"]`: título, resumo, principais habilidades (★), experiências (cargo, empresa, local, início/fim em mês, atual, itens), formação, idiomas, certificações e projetos. Ao salvar, gera o texto em `curriculo` no formato que o leitor de cargos entende ("Cargo | Empresa", "01/2021 - atual", "- item"). Assim anos por skill, sugestões e IA seguem iguais.
@@ -153,6 +154,7 @@ A tela Currículo junta o texto do currículo (antes no Perfil) e o que sai dele
 
 - A barra do chat (LinkedIn e WhatsApp) manda a conversa aberta para `POST /api/extensao/chat/abordagem` quando ela muda (outra pessoa ou mensagem nova).
 - [jobscout/approach.py](../jobscout/approach.py) procura, só no que o recrutador escreveu, a empresa e o título ("vaga de X na Y", "role at Y", "recrutadora da Y"), o modelo de trabalho e um link de vaga (LinkedIn, Gupy, InHire). O que faltar a IA local (tarefa privada "classificar") completa, e só vale o que estiver escrito na conversa.
+- "Inserir na conversa" guarda a resposta na vaga (`POST /api/extensao/chat/registrar`), e mensagem do recrutador na conversa conta como retorno nos indicadores.
 - Vaga nova vira rascunho "Nova vaga" com a origem do canal, um trecho da conversa na descrição e a pessoa que abordou. Ao aprovar, ela fica vinculada como recrutadora. Sem link da vaga, o endereço é `https://jobscout.local/abordagem/<canal>/<pessoa-empresa>` (só identifica; o painel não mostra como link).
 - O botão da barra passa a dizer "oportunidade nova". Vaga já salva ou rascunho já aberto não se repetem; descartado não volta.
 
@@ -169,6 +171,7 @@ A tela Currículo junta o texto do currículo (antes no Perfil) e o que sai dele
 - [jobscout/reminders.py](../jobscout/reminders.py): lembretes com data, repetição (a cada N dias, M vezes) e intenção de mensagem. Modelos prontos: cobrar retorno (em 7 dias, a cada 7, 3 vezes), pedir feedback, agradecer pela entrevista, responder a proposta, outro.
 - A cada minuto o JobScout avisa uma vez cada lembrete vencido (atividade e bolha). "Escrever mensagem" abre a aba Mensagens com a vaga e a intenção escolhidas; "Feito" passa para a próxima ocorrência (sem acumular as atrasadas), "Adiar" empurra 1 dia, "Parar" encerra.
 - Vaga em recusada, fria ou proposta para os lembretes dela sozinha.
+- Sem API: cada lembrete tem o botão Agenda (link `calendar.google.com/calendar/render?action=TEMPLATE`, com a repetição) e o arquivo `.ics` (`GET /api/lembretes/{id}/agenda.ics`). Etapa com data futura vira lembrete; mudar a data troca o lembrete. Adiar refaz o evento quando há agenda ligada por API.
 - Com o Google conectado com a permissão `calendar.events`, cada lembrete vira evento no Google Agenda principal (30 minutos, aviso na hora, com a mesma regra de repetição `RRULE`). Parar apaga o evento. Fuso em `JOBSCOUT_FUSO` (padrão `America/Sao_Paulo`). Sem a permissão, tudo funciona no JobScout.
 
 ## Busca automática de vagas
@@ -183,7 +186,7 @@ A tela Currículo junta o texto do currículo (antes no Perfil) e o que sai dele
 - Pontuação de 0 a 100: título procurado (50) ou parecido (30, aceita gênero e plural), empresa (40), palavras desejadas (10 cada, até 30), modelo de trabalho (+15, ou −30 se for outro), local (+10). Palavra excluída zera. Abaixo de 30, não entra.
 - Títulos similares (`similar_titles`): tabela de equivalentes em português e inglês (Engenheiro de Dados → Data Engineer, Analytics Engineer...) e tradução palavra a palavra para o resto. Vale título similar (45).
 - Modelos: remoto, híbrido, presencial na cidade atual e presencial mudando de cidade; sem nada marcado, vale o Perfil.
-- Presets (`busca_presets`): buscas com nome, no painel lateral da aba Busca de vagas.
+- Presets (`busca_presets`): buscas com nome, no painel lateral da aba Busca de vagas. Os marcados "Buscar sozinho" rodam junto com a busca automática; "Buscar agora" roda só o formulário.
 - Os resultados ficam em `search_results`; vaga já salva não entra, e o que já apareceu (mesmo descartado) não volta. "Salvar vaga" cria a vaga como Visualizada.
 
 ## Busca (chat) e encaixe
@@ -195,6 +198,13 @@ A tela Currículo junta o texto do currículo (antes no Perfil) e o que sai dele
 
 - Tema: JSON com `nome`, `claro` e `escuro`, usando as cores de `appearance.TOKENS`; só entram nomes conhecidos e valores de cor (`#rrggbb`, `rgb()`, `hsl()`). Fica em `preferencias.json` (`tema`).
 - Personagem: imagens PNG, GIF, WebP ou SVG por pose (`idle` obrigatória, `think`, `throw`), até 600 KB cada, em `boneco.json`, mostradas em `<img>`.
+
+## Segundo plano
+
+- [jobscout/tray.py](../jobscout/tray.py): ícone nos ícones ocultos, em Win32 puro. Clique alterna a janela; o botão direito mostra Abrir, Painel e Sair.
+- O × do overlay esconde (`Bridge.ocultar`): o servidor, a verificação de e-mail, os lembretes e a busca continuam. Com a janela escondida, o aviso vira notificação do Windows. Quem encerra é o Sair.
+- Abrir o JobScout de novo só mostra a janela que já está rodando (`POST /api/janela/mostrar`).
+- Config > Segundo plano: abrir escondido (`iniciar_oculto`) e iniciar com o Windows (chave `Run` do usuário, com `pythonw`).
 
 ## Modelos por tarefa
 
@@ -253,14 +263,19 @@ Perfil em `profile.json`: dados pessoais, links, pretensão, disponibilidade, te
   - Perguntas respondidas com botões (Sim/Não da Ashby) viram pergunta de opção: sugestão ao lado e "Usar" clica no botão.
   - Em sites de terceiros, toda pergunta sem resposta recebe sugestão ao lado do campo: regras primeiro, depois a IA em lotes de 6, inclusive texto longo (até 1.500 caracteres). O que nem a IA responde mostra "Sem sugestão"; texto longo sem sugestão ainda vira rascunho. O script roda também em iframes (formulário embutido) de endereços com permissão.
   - Perguntas de consentimento (SMS, WhatsApp, termos, privacidade) nunca recebem sugestão.
+  - Currículo: ao lado do campo de arquivo aparece a escolha da versão; "Anexar" gera o PDF (`POST /api/extensao/curriculo-pdf`) e coloca no campo. Só no clique.
+  - Grupo de caixas vira uma pergunta: lista de ferramentas é marcada pelo currículo; o resto vai para a IA, que pode escolher várias.
+  - Lista com busca (combobox): depois de digitar, o script escolhe a opção mais parecida.
+  - A IA tem uma segunda tentativa, campo a campo, para o que pulou no lote. Resposta aberta com número ou ferramenta fora do Perfil é descartada.
   - A vaga sai do JSON-LD ou do título da página; a empresa, do endereço do sistema de candidatura. Vira rascunho "Nova vaga" com origem "Outro site" (`web`), sem a etapa `/application` e sem `utm_`.
-- Pretensão salarial em duas moedas (`pretensao_salarial`, em real, e `pretensao_usd`, em dólar). A moeda dita na pergunta ou nas opções manda; sem moeda, inglês usa dólar e o resto usa real, e a sugestão mostra o outro valor. Não há conversão: pergunta que pede uma moeda sem valor no Perfil fica sem sugestão de pretensão. Campo numérico recebe só o número.
+- Pretensão salarial em duas moedas (`pretensao_salarial`, em real, e `pretensao_usd`, em dólar). A moeda dita na pergunta ou nas opções manda; sem moeda, inglês usa dólar e o resto usa real, e a sugestão mostra o outro valor. Não há conversão automática: pergunta que pede uma moeda sem valor no Perfil fica sem sugestão de pretensão; no Perfil, um botão completa a outra moeda pela cotação do dia (`GET /api/cotacao`), e a pessoa confere e salva. Campo numérico recebe só o número.
 - "Você mora/está em X?" (América Latina, LATAM, América do Sul, Europa, América do Norte ou um país) é respondida pelo país do Perfil (`places.in_region`) e nunca vai para a IA.
 - Nunca clica em Enviar.
 
 ## E-mail
 
 - Login do Google (OAuth) no próprio computador, com o cliente salvo em Config ou no `.env`; o Gmail não precisa ficar aberto (PKCE, escopos `gmail.readonly` e `calendar.events`), verificação a cada `JOBSCOUT_GMAIL_INTERVALO_MIN` minutos. Quem conectou antes só com o Gmail precisa desconectar e conectar de novo para liberar a agenda.
+- Sem projeto no Google Cloud: [jobscout/imap_mail.py](../jobscout/imap_mail.py) lê por IMAP com senha de app (verificação em duas etapas na conta). Caixa em modo leitura, `BODY.PEEK` não marca como lido, mesma consulta do Gmail por `X-GM-RAW`. A senha fica cifrada com DPAPI em `preferencias.json`. Com ela conectada, tem prioridade sobre o OAuth.
 - Sem Gmail configurado, a aba Rascunhos importa arquivos `.eml`.
 - Pré-filtro por regras: domínio de empresa já acompanhada ou palavras como “processo seletivo”, “entrevista”.
 - Avaliação de recrutamento e seleção (`mail.relevance`): regras decidem os casos claros (empresa acompanhada, plataforma de recrutamento, "processo seletivo", "entrevista"; newsletter, curso e lista de envio com descadastro ficam de fora). Os duvidosos vão para a IA local (tarefa privada "classificar"), que responde se o e-mail envolve a pessoa num processo e por quê. Sem IA, na dúvida vira rascunho. O motivo aparece na atividade e no rascunho (`relevancia`).

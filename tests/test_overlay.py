@@ -25,5 +25,15 @@ class SnapTest(unittest.TestCase):
         self.assertEqual(snap(SCREEN, bubble_at(1850, 500), 2.0), (1920 - 2 * MARGIN, 500))
 
 
+
+class TrayIconTest(unittest.TestCase):
+    def test_icon_file_is_a_valid_ico_with_png(self):
+        from jobscout.tray import icon_bytes
+
+        data = icon_bytes()
+        self.assertEqual(data[:4], b"\x00\x00\x01\x00")
+        self.assertEqual(data[22:26], b"\x89PNG")
+
+
 if __name__ == "__main__":
     unittest.main()

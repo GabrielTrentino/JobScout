@@ -67,6 +67,7 @@ class Gmail:
             "ultima_verificacao": self.last_check,
             "erro": self.last_error,
             "intervalo_min": self.interval_minutes(),
+            "metodo": "google",
             "agenda": self.calendar_ready(),
             "agenda_pendente": self.connected() and not self.calendar_ready(),
         }
@@ -193,7 +194,7 @@ class Gmail:
 class Poller:
     """Verifica o Gmail a cada poucos minutos, numa thread de fundo."""
 
-    def __init__(self, gmail: Gmail, check: Callable[[], int]) -> None:
+    def __init__(self, gmail: Any, check: Callable[[], int]) -> None:
         self.gmail = gmail
         self.check = check
         self._stop = threading.Event()

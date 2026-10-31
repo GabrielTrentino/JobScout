@@ -885,13 +885,25 @@ class Assistant:
                 known = None
             job_fields = known or {key: str(job.get(key) or "") for key in ("title", "company", "description")}
         self.hub.activity(f"IA pensando em {len(clean)} pergunta(s) do formulário…", "trabalhando")
+        profile_text = as_prompt(self.profile.load())
+        facts = profile_text + "\n" + json.dumps(past, ensure_ascii=False)
+
+        def ask(batch: list[dict[str, Any]]) -> list[dict[str, str]]:
+            raw = llm.ask_llm("responder", ai_suggest.prompt(batch, profile_text, past, job_fields),
+                              system=ai_suggest.SYSTEM, as_json=True, timeout=180 if any(field["tipo"] == "textarea" for field in batch) else 120)
+            return ai_suggest.parse(raw, batch, model, facts)
+
         try:
-            raw = llm.ask_llm("responder", ai_suggest.prompt(clean, as_prompt(self.profile.load()), past, job_fields),
-                              system=ai_suggest.SYSTEM, as_json=True, timeout=180 if any(field["tipo"] == "textarea" for field in clean) else 120)
+            found = ask(clean)
+            # Modelo pequeno às vezes pula campos do lote: os que faltaram têm uma segunda chance, sozinhos.
+            answered = {item["campo"] for item in found}
+            missing = [field for field in clean if field["campo"] not in answered]
+            if missing and len(clean) > 1:
+                for field in missing:
+                    found += ask([field])
         except llm.LLMUnavailable as exc:
             self.hub.activity(f"IA indisponível para o formulário. {exc}", "aviso")
             return {"ia": True, "sugestoes": [], "erro": str(exc)}
-        found = ai_suggest.parse(raw, clean, model)
         self.hub.activity(f"IA sugeriu {len(found)} de {len(clean)} resposta(s). Confira antes de usar.", "ok" if found else "info")
         return {"ia": True, "sugestoes": found}
 
@@ -1114,6 +1126,25 @@ class Assistant:
             "vagas": [_job_brief(job) for job in self.store.jobs() if job["title"] or job["company"]][:80],
             "intencoes": [intent for intent in self.message_library() if intent["ativo"]],
         }
+
+    def chat_record(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Guarda na vaga a resposta inserida no chat; quem escreveu do outro lado conta como retorno."""
+        job = self.store.job(int(data["vaga_id"])) if data.get("vaga_id") else None
+        text = str(data.get("texto") or "").strip()[:4000]
+        if job is None or not text:
+            return {"registrado": False}
+        channel = str(data.get("canal") or "chat")[:20]
+        self.store.add_message({
+            "application_id": job["application_id"], "contact_id": data.get("contato_id") or None, "channel": channel,
+            "subject": clean_space(str(data.get("intencao") or "Resposta no chat"))[:120], "body": text, "summary": text[:200],
+            "classification": "enviada",
+        })
+        source = channel if channel in SOURCES else "painel"
+        self.store.log("mensagem", f"Resposta inserida no {SITE_NAMES.get(channel, channel)}", source, job_id=job["id"], detail={"intencao": data.get("intencao")})
+        if data.get("recebeu"):
+            self.store.log("chat_retorno", "Recrutador respondeu no chat", source, job_id=job["id"])
+        self.hub.publish("vaga", id=job["id"])
+        return {"registrado": True}
 
     def chat_approach(self, data: dict[str, Any]) -> dict[str, Any]:
         """Recrutador oferecendo vaga no chat: se ainda não está salva, vira rascunho de vaga para aprovar."""
@@ -1428,6 +1459,7 @@ class Assistant:
     def results(self) -> list[dict[str, Any]]:
         """Candidaturas com o que foi enviado e até onde cada uma chegou (retorno, entrevista, proposta)."""
         reached = self.store.stages()
+        answered = self.store.chat_returns()
         versions = [{**version, "label": version["name"]} for version in self.store.resume_versions()]
         rows = []
         for job in self.store.jobs():
@@ -1447,7 +1479,7 @@ class Assistant:
                 "documentos": job.get("documents") or "",
                 "curriculo": cv.resume_kind(job.get("documents") or "", versions),
                 "salario_informado": job.get("salary_informed") or "",
-                "retorno": bool(stages & RETURN_STAGES),
+                "retorno": bool(stages & RETURN_STAGES) or job["id"] in answered,
                 "entrevista": bool(stages & {"entrevista", "proposta"}),
                 "proposta": "proposta" in stages,
                 "recusada": "recusada" in stages,
@@ -1473,8 +1505,8 @@ class Assistant:
             "encaixe_ia": json.loads(job["fit_ai"]) if job.get("fit_ai") else None,
             "curriculo": cv.resume_kind(job.get("documents") or "", versions),
             "curriculos": [
-                {"valor": version["name"], "nome": f"Customizado: {version['name']}"} for version in versions
-                if version["job_id"] == job_id or not version["job_id"]
+                {"valor": version["name"], "nome": f"{'Customizado' if version['job_id'] else 'Padrão'}: {version['name']}"}
+                for version in versions if version["job_id"] == job_id or not version["job_id"]
             ] + [{"valor": "Currículo padrão", "nome": "Padrão: Currículo padrão"}],
         }
 

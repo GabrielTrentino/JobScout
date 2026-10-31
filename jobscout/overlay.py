@@ -7,6 +7,9 @@ import sys
 import time
 import webbrowser
 from dataclasses import dataclass
+from pathlib import Path
+
+from jobscout import tray
 
 WIDTH = 400
 
@@ -44,6 +47,8 @@ HWND_NOTOPMOST = -2
 SWP_NOSIZE = 0x0001
 SWP_NOMOVE = 0x0002
 SWP_NOACTIVATE = 0x0010
+SW_HIDE = 0
+SW_SHOW = 5
 
 
 def own_window(title: str) -> int:
@@ -239,9 +244,14 @@ class Bridge:
         self._width = BUBBLE
         self._shape = "orb"
         self._anchor: tuple[int, int] | None = None
+        self._handle = 0
+        self._hidden = False
+        self._tray = None
 
     def _hwnd(self) -> int:
-        return own_window(self._window.title)
+        # Janela escondida some da lista do Windows: guarda o HWND da primeira vez.
+        self._handle = self._handle or own_window(self._window.title)
+        return self._handle
 
     def encaixar(self) -> bool:
         """Reaplica o formato atual (também usado ao abrir)."""
@@ -299,6 +309,39 @@ class Bridge:
     def fechar(self) -> None:
         self._window.destroy()
 
+    def ocultar(self) -> bool:
+        """Vai para os ícones ocultos; o JobScout segue rodando. False se não há ícone na bandeja."""
+        hwnd = self._hwnd()
+        if not hwnd or not self._tray or not self._tray.ok:
+            return False
+        ctypes.windll.user32.ShowWindow(ctypes.c_void_p(hwnd), SW_HIDE)
+        self._hidden = True
+        return True
+
+    def mostrar(self) -> bool:
+        hwnd = self._hwnd()
+        if not hwnd:
+            return False
+        ctypes.windll.user32.ShowWindow(ctypes.c_void_p(hwnd), SW_SHOW)
+        ctypes.windll.user32.SetForegroundWindow(ctypes.c_void_p(hwnd))
+        self._hidden = False
+        return self.encaixar()
+
+    def alternar(self) -> None:
+        if self._hidden:
+            self.mostrar()
+        else:
+            self.ocultar()
+
+    def avisar(self, texto: str = "") -> None:
+        """Aviso do Windows, só com a janela escondida (com ela aberta, o aviso aparece na bolha)."""
+        if self._hidden and self._tray and texto:
+            self._tray.notify(self._window.title, str(texto))
+
+    def dica(self, texto: str = "") -> None:
+        if self._tray and texto:
+            self._tray.set_tip(str(texto))
+
 
 def available() -> bool:
     try:
@@ -308,8 +351,8 @@ def available() -> bool:
     return True
 
 
-def run(panel_url: str, on_closed) -> None:
-    """Abre o overlay. Bloqueia a thread principal até a janela fechar."""
+def run(panel_url: str, on_closed, *, icon: Path | None = None, hidden: bool = False, name: str = "JobScout", on_bridge=None) -> None:
+    """Abre o overlay e o ícone nos ícones ocultos. Bloqueia a thread principal até sair pelo menu."""
     import webview
 
     area = work_area()
@@ -331,13 +374,23 @@ def run(panel_url: str, on_closed) -> None:
     )
     bridge._window = window
 
+    if icon:
+        bridge._tray = tray.Tray(name, icon, bridge.alternar, lambda: bridge.abrir_painel("agora"), window.destroy)
+        bridge._tray.start()
+    if on_bridge:
+        on_bridge(bridge)
+
     def on_shown() -> None:
         # A janela nativa pode levar um instante para aparecer na lista do Windows.
         for _ in range(20):
             if bridge.encaixar():
+                if hidden:
+                    bridge.ocultar()
                 return
             time.sleep(0.1)
 
     window.events.shown += on_shown
     window.events.closed += on_closed
     webview.start(private_mode=False)
+    if bridge._tray:
+        bridge._tray.stop()

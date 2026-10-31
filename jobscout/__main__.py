@@ -5,10 +5,22 @@ from __future__ import annotations
 import argparse
 import threading
 import webbrowser
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
-from jobscout import overlay
+from jobscout import overlay, tray
 from jobscout.config import data_dir
 from jobscout.server import App, make_server
+
+
+def _already_running(host: str, port: int) -> bool:
+    """Com o JobScout nos ícones ocultos, abrir de novo só traz a janela de volta."""
+    request = Request(f"http://{host}:{port}/api/janela/mostrar", data=b"{}", headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urlopen(request, timeout=1.5) as response:
+            return b"jobscout" in response.read()
+    except (URLError, OSError):
+        return False
 
 
 def main() -> None:
@@ -18,6 +30,9 @@ def main() -> None:
     parser.add_argument("--navegador", action="store_true", help="abre o painel no navegador em vez do overlay")
     parser.add_argument("--no-browser", action="store_true", help="só o servidor, sem janela")
     args = parser.parse_args()
+    if not args.no_browser and not args.navegador and _already_running(args.host, args.port):
+        print("O JobScout já está aberto: mostrei a janela dele.")
+        return
     app = App()
     last_error: OSError | None = None
     httpd = None
@@ -53,7 +68,12 @@ def main() -> None:
     try:
         if use_overlay:
             threading.Thread(target=httpd.serve_forever, daemon=True).start()
-            overlay.run(url, on_closed=lambda: None)
+            tray.hide_console()
+            prefs = app.preferences.load()
+            overlay.run(
+                url, on_closed=lambda: None, icon=data_dir() / "jobscout.ico", hidden=prefs["iniciar_oculto"], name=prefs["nome"],
+                on_bridge=lambda bridge: setattr(app, "show_window", bridge.mostrar),
+            )
         else:
             if not args.no_browser:
                 threading.Timer(0.3, lambda: webbrowser.open(url)).start()

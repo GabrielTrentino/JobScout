@@ -349,6 +349,12 @@ def suggest(question: str, profile: dict[str, Any], *, options: list[str] | None
     resume = profile.get("curriculo") or ""
     asked_skills = insights.skills(question)
 
+    # Lista de ferramentas para marcar: valem as que o currículo cita.
+    if kind == "checkbox" and options and sum(1 for option in options if insights.skills(option)) * 2 >= len(options):
+        mine = {fold(name) for name in insights.skills(resume)}
+        chosen = [option for option in options if any(fold(name) in mine for name in insights.skills(option))]
+        return {"valor": "; ".join(chosen), "origem": "curriculo", "base": "Currículo: ferramentas que você cita"} if chosen else None
+
     if YEARS.search(folded):
         skill = asked_skills[0] if asked_skills else None
         info = experience(resume, skill)

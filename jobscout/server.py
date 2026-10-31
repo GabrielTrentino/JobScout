@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import csv
 import io
 import json
@@ -16,7 +17,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 
-from jobscout import appearance, cv, exporting, insights, jobsearch, linkedin_public, llm, mail, preferences, reminders, replies, resume_tools
+from jobscout import appearance, cv, exporting, fx, imap_mail, insights, jobsearch, linkedin_public, llm, mail, preferences, reminders, replies, resume_tools, tray
 from jobscout.activities import (
     MAX_BYTES,
     ResumeReadError,
@@ -25,7 +26,7 @@ from jobscout.activities import (
     list_tools,
     read_resume_bytes,
 )
-from jobscout.assistant import Assistant, DraftError, company_key
+from jobscout.assistant import Assistant, DraftError, company_key, normalize_url
 from jobscout.config import data_dir, setting
 from jobscout.events import Hub
 from jobscout.gmail import ALERT_QUERY, Gmail, GmailError, Poller
@@ -52,6 +53,16 @@ def cold_days() -> int:
         return 14
 
 
+class ActiveMail:
+    """O e-mail em uso: senha de app, se conectada; senão, o login do Google."""
+
+    def __init__(self, app: "App") -> None:
+        self._app = app
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._app.mail(), name)
+
+
 class App:
     """Tudo que o servidor precisa, montado uma vez."""
 
@@ -67,7 +78,8 @@ class App:
         self.assistant._message_overrides_loader = lambda: self.preferences.load()["mensagens_modelos"]
         self.gmail = Gmail(folder / "gmail_token.json", credentials=self.google_credentials)
         self.avatar = appearance.Avatar(folder / "boneco.json")
-        self.poller = Poller(self.gmail, self.check_gmail)
+        self.imap = imap_mail.ImapMail(self.preferences.load, self.preferences.save)
+        self.poller = Poller(ActiveMail(self), self.check_gmail)
         self.reminders = reminders.Reminders(self.store, self.hub, self.gmail, link=lambda: self.backend)
         self.search = jobsearch.JobSearch(
             self.store, self.hub,
@@ -76,9 +88,11 @@ class App:
             alerts=self.linkedin_alerts,
             profile=self.profile.load,
             fit=self.assistant.rule_fit,
+            presets=lambda: self.preferences.load()["busca_presets"],
         )
         self.stopping = threading.Event()
         self.extension_seen = 0.0
+        self.show_window: Callable[[], Any] | None = None
 
     def start_cold_check(self) -> None:
         """De hora em hora, propõe marcar como fria a vaga parada (vira rascunho)."""
@@ -93,6 +107,9 @@ class App:
                     return
 
         threading.Thread(target=loop, daemon=True).start()
+
+    def mail(self) -> Any:
+        return self.imap if self.imap.connected() else self.gmail
 
     def google_credentials(self) -> tuple[str, str]:
         prefs = self.preferences.load()
@@ -117,6 +134,9 @@ class App:
             # A chave fica só no arquivo local; o painel só precisa saber se existe.
             "gemini_chave": bool(prefs["gemini_chave"] or llm.gemini_key()),
             "google_chave": bool(prefs["google_chave"]),
+            # A senha de app nunca volta ao painel.
+            "imap_senha": bool(prefs["imap_senha"]),
+            "iniciar_com_windows": tray.autostart_enabled(),
             "extensao": str(folder / preferences.EXTENSION_FOLDER),
             "exportacoes": str(folder / preferences.EXPORT_FOLDER),
             "pronta": (folder / preferences.EXTENSION_FOLDER / "manifest.json").is_file(),
@@ -169,6 +189,30 @@ class App:
             result["aviso"] = note
         return result
 
+    def create_model(self, name: str) -> dict[str, Any]:
+        """Modelo de currículo padrão: uma cópia do completo, sem vaga, editada à parte."""
+        name = " ".join(name.split())[:80]
+        if not name:
+            raise ValueError("Dê um nome ao modelo.")
+        if any(version["name"] == name for version in self.store.resume_versions()):
+            raise ValueError("Já existe um currículo com esse nome.")
+        return self.store.resume_version(self.store.add_resume_version(None, name, "pt", self.base_resume()))
+
+    def resume_choices(self, job_url: str = "") -> list[dict[str, Any]]:
+        """Para anexar no formulário: a versão desta vaga primeiro, depois os modelos e o completo."""
+        job = None
+        if job_url:
+            try:
+                job = self.store.job_by_url(normalize_url(job_url))
+            except DraftError:
+                job = None
+        versions = self.store.resume_versions()
+        own = [item for item in versions if job and item["job_id"] == job["id"]]
+        models = [item for item in versions if not item["job_id"]]
+        choices = [{"versao": item["id"], "nome": f"Customizado: {item['name']}"} for item in own]
+        choices += [{"versao": item["id"], "nome": f"Padrão: {item['name']}"} for item in models]
+        return choices + [{"versao": 0, "nome": "Currículo completo"}]
+
     def export_resume(self, version_id: int | None) -> Path:
         profile = self.profile.load()
         folder = Path(self.folder_state()["exportacoes"]) / "Currículos"
@@ -214,7 +258,7 @@ class App:
                 items.append({"nome": "IA", "estado": "ok", "detalhe": model})
         else:
             items.append({"nome": "IA", "estado": "ok", "detalhe": model})
-        gmail = self.gmail.status()
+        gmail = self.mail().status()
         if not gmail["configurado"] or not gmail["conectado"]:
             items.append({"nome": "Gmail", "estado": "desligado", "detalhe": "Não conectado."})
         elif gmail["erro"]:
@@ -251,13 +295,14 @@ class App:
 
     def check_gmail(self) -> int:
         self.hub.activity("Gmail: procurando e-mails de recrutadores…", "trabalhando")
+        source = self.mail()
         try:
-            found = self.gmail.fetch_new(self.store.gmail_seen)
+            found = source.fetch_new(self.store.gmail_seen)
         except GmailError as exc:
-            self.gmail.last_error = str(exc)
+            source.last_error = str(exc)
             self.hub.activity(f"Gmail: falhou. {exc}", "erro")
             raise
-        self.gmail.last_error = None
+        source.last_error = None
         created = 0
         jobs = self.store.jobs()
         for message_id, raw in found:
@@ -276,7 +321,7 @@ class App:
                 if self.assistant.intake_message(payload):
                     created += 1
             self.store.mark_gmail_seen(message_id)
-        self.gmail.last_check = now()
+        source.last_check = now()
         self.hub.publish("gmail", novos=created)
         level = "aviso" if created else "ok"
         self.hub.activity(f"Gmail: {len(found)} e-mail(s) novo(s), {created} virou(aram) rascunho.", level)
@@ -284,11 +329,12 @@ class App:
 
     def linkedin_alerts(self) -> list[dict[str, Any]]:
         """E-mails de alerta de vagas do LinkedIn ainda não lidos pela busca (vazio sem Gmail)."""
-        if not (self.gmail.configured() and self.gmail.connected()):
+        source = self.mail()
+        if not (source.configured() and source.connected()):
             return []
         seen = lambda message_id: self.store.gmail_seen("alerta:" + message_id)  # noqa: E731
         messages = []
-        for message_id, raw in self.gmail.fetch_new(seen, limit=20, query=ALERT_QUERY):
+        for message_id, raw in source.fetch_new(seen, limit=20, query=ALERT_QUERY):
             messages.append(mail.parse_eml(raw))
             self.store.mark_gmail_seen("alerta:" + message_id)
         return messages
@@ -455,7 +501,7 @@ class Handler(BaseHTTPRequestHandler):
             "vagas": app.store.jobs(),
             "rascunhos": app.store.drafts("pendente"),
             "modelos": llm.describe(),
-            "gmail": app.gmail.status(),
+            "gmail": app.mail().status(),
             "dias_fria": cold_days(),
             "minhas_skills": app.my_skills(),
             "preferencias": app.folder_state(),
@@ -784,6 +830,9 @@ class Handler(BaseHTTPRequestHandler):
     def create_resume_version(self) -> None:
         self._panel_only()
         data = self._json()
+        if data.get("modelo"):
+            self._send_json(201, self.app.create_model(str(data["modelo"])))
+            return
         self._send_json(201, self.app.create_version(int(data.get("vaga_id") or 0), bool(data.get("ia"))))
 
     @route("GET", r"/api/curriculo/versoes/(\d+)")
@@ -989,6 +1038,24 @@ class Handler(BaseHTTPRequestHandler):
                 assistant.link_contact(job_id, contact_id)
         self._send_json(200, assistant.contact_detail(contact_id))
 
+    @route("POST", "/api/extensao/chat/registrar")
+    def chat_record(self) -> None:
+        """Resposta inserida no chat fica na vaga (e a mensagem do recrutador conta como retorno)."""
+        self._send_json(200, self.app.assistant.chat_record(self._json()))
+
+    @route("POST", "/api/extensao/curriculos")
+    def extension_resumes(self) -> None:
+        self._send_json(200, {"curriculos": self.app.resume_choices(str(self._json().get("url") or ""))})
+
+    @route("POST", "/api/extensao/curriculo-pdf")
+    def extension_resume_pdf(self) -> None:
+        """PDF para anexar no formulário; a extensão só envia quando a pessoa clica em Anexar."""
+        try:
+            target = self.app.export_resume(int(self._json().get("versao") or 0) or None)
+        except RuntimeError as exc:
+            raise ApiError(502, str(exc)) from exc
+        self._send_json(200, {"nome": target.name, "base64": base64.b64encode(target.read_bytes()).decode("ascii")})
+
     @route("POST", "/api/extensao/chat/abordagem")
     def chat_approach(self) -> None:
         """A extensão lê a conversa aberta: recrutador oferecendo vaga nova vira rascunho de oportunidade."""
@@ -1081,7 +1148,9 @@ class Handler(BaseHTTPRequestHandler):
     @route("PUT", r"/api/vagas/(\d+)/etapas")
     def save_job_stages(self, job_id: str) -> None:
         self._panel_only()
-        self._send_json(200, self.app.assistant.save_stages(int(job_id), self._json().get("etapas")))
+        view = self.app.assistant.save_stages(int(job_id), self._json().get("etapas"))
+        self.app.reminders.sync_stages(int(job_id), view["etapas"])
+        self._send_json(200, view)
 
     @route("POST", r"/api/vagas/(\d+)/etapas/mover")
     def move_job_stage(self, job_id: str) -> None:
@@ -1117,12 +1186,19 @@ class Handler(BaseHTTPRequestHandler):
         states = tuple(self.query.get("estado", "ativo").split(","))
         job_id = int(self.query["vaga"]) if self.query.get("vaga") else None
         self._send_json(200, {
-            "lembretes": self.app.store.reminders(job_id, states),
+            "lembretes": [{**row, "agenda_link": reminders.calendar_link(row)} for row in self.app.store.reminders(job_id, states)],
             "vencidos": [row["id"] for row in self.app.reminders.due()],
             "modelos": [{**preset, "quando": reminders.preset_date(preset)} for preset in reminders.PRESETS],
             "agenda": {"conectada": self.app.gmail.calendar_ready(), "google": self.app.gmail.connected(),
                        "configurado": self.app.gmail.configured()},
         })
+
+    @route("GET", r"/api/lembretes/(\d+)/agenda\.ics")
+    def reminder_ics(self, reminder_id: str) -> None:
+        reminder = self.app.store.reminder(int(reminder_id))
+        if reminder is None:
+            raise LookupError(f"Lembrete {reminder_id} não encontrado.")
+        self._send(200, reminders.ics(reminder).encode("utf-8"), "text/calendar; charset=utf-8")
 
     @route("POST", "/api/lembretes")
     def create_reminder(self) -> None:
@@ -1148,7 +1224,7 @@ class Handler(BaseHTTPRequestHandler):
             "proxima": following.isoformat(timespec="minutes") if following else None,
             "limites": {"min_horas": jobsearch.MIN_HOURS, "max_horas": jobsearch.MAX_HOURS, "max_titulos": jobsearch.MAX_TERMS,
                         "max_inhire": jobsearch.MAX_TENANTS, "pontuacao_minima": jobsearch.MIN_SCORE},
-            "gmail": self.app.gmail.connected(),
+            "gmail": self.app.mail().connected(),
         }
 
     @route("GET", "/api/busca/config")
@@ -1311,9 +1387,45 @@ class Handler(BaseHTTPRequestHandler):
 
     @route("POST", "/api/gmail/desconectar")
     def gmail_disconnect(self) -> None:
-        self.app.gmail.disconnect()
+        self.app.mail().disconnect()
         self.app.hub.publish("gmail")
-        self._send_json(200, self.app.gmail.status())
+        self._send_json(200, self.app.mail().status())
+
+    @route("POST", "/api/email/conectar")
+    def email_connect(self) -> None:
+        """Senha de app: testa o login antes de guardar."""
+        self._panel_only()
+        data = self._json()
+        try:
+            self.app.imap.connect(str(data.get("email") or ""), str(data.get("senha") or ""), str(data.get("servidor") or ""))
+        except GmailError as exc:
+            raise ApiError(422, str(exc)) from exc
+        self.app.poller.start()
+        self.app.hub.publish("gmail")
+        self._send_json(200, self.app.imap.status())
+
+    @route("POST", "/api/janela/mostrar")
+    def show_window(self) -> None:
+        if self.app.show_window:
+            self.app.show_window()
+        self._send_json(200, {"app": "jobscout"})
+
+    @route("POST", "/api/segundo-plano")
+    def background_mode(self) -> None:
+        self._panel_only()
+        data = self._json()
+        if "iniciar_oculto" in data:
+            self.app.preferences.save({"iniciar_oculto": data["iniciar_oculto"]})
+        if "iniciar_com_windows" in data:
+            tray.set_autostart(bool(data["iniciar_com_windows"]))
+        self._send_json(200, self.app.folder_state())
+
+    @route("GET", "/api/cotacao")
+    def exchange_rate(self) -> None:
+        try:
+            self._send_json(200, fx.usd_brl())
+        except fx.RateError as exc:
+            raise ApiError(503, str(exc)) from exc
 
     def _gmail_redirect(self) -> str:
         host, port = self.server.server_address[:2]
@@ -1355,7 +1467,7 @@ class ReusableServer(ThreadingHTTPServer):
 def make_server(host: str = "127.0.0.1", port: int = 8765, app: App | None = None) -> ReusableServer:
     app = app or App()
     httpd = ReusableServer((host, port), app)
-    if app.gmail.configured() and app.gmail.connected():
+    if app.mail().configured() and app.mail().connected():
         app.poller.start()
     return httpd
 
