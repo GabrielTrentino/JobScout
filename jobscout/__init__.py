@@ -1,3 +1,3 @@
-"""JobScout lê um currículo neste computador e lista as atividades principais."""
+"""JobScout acompanha a busca de emprego neste computador: captura, rascunho, aprovação."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

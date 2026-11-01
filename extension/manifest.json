@@ -1,0 +1,76 @@
+{
+  "manifest_version": 3,
+  "name": "JobScout",
+  "version": "0.7.0",
+  "description": "Registra vagas e candidaturas e ajuda a preencher formulários de candidatura (LinkedIn, InHire e qualquer site que você ligar) no JobScout deste computador. Sugere respostas a recrutadores no LinkedIn, WhatsApp Web e Gmail. Tudo vira rascunho ou sugestão para você revisar.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "storage",
+    "alarms",
+    "scripting",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "JobScout",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/*"
+      ],
+      "js": [
+        "content/core.js",
+        "content/page.js",
+        "content/chat.js",
+        "content/linkedin.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://*.inhire.app/*",
+        "https://*.inhire.com.br/*"
+      ],
+      "js": [
+        "content/core.js",
+        "content/page.js",
+        "content/inhire.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "content/core.js",
+        "content/chat.js",
+        "content/whatsapp.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://mail.google.com/*"
+      ],
+      "js": [
+        "content/core.js",
+        "content/chat.js",
+        "content/gmail.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ]
+}

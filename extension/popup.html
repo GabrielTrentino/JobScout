@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>JobScout</title>
+  <style>
+    :root { --ink: #1c2b33; --paper: #fbfcfd; --cabinet: #24556b; --stamp: #c5362b; --ok: #2f6d4a; --rule: #d5dee3; --muted: #3d515a; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink: #dbe6eb; --paper: #172329; --cabinet: #6fa9c4; --stamp: #ef7a6f; --ok: #7cc79b; --rule: #2a3a43; --muted: #9fb3bd; }
+    }
+    body { margin: 0; width: 22rem; font: 14px/1.4 Georgia, serif; color: var(--ink); background: var(--paper); }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--rule); }
+    h1 { margin: 0; font: 600 1.1rem "Arial Narrow", sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+    a { color: var(--cabinet); }
+    ol { list-style: none; margin: 0; padding: 0; max-height: 22rem; overflow: auto; }
+    li { padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--rule); }
+    .kind { font: 600 0.8rem "Arial Narrow", sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cabinet); }
+    .title { display: block; margin: 0.1rem 0 0.35rem; overflow-wrap: anywhere; }
+    button { border: 0; padding: 0.25rem 0.6rem; font: 600 0.85rem "Arial Narrow", sans-serif; cursor: pointer; color: #fff; background: var(--ok); }
+    button.no { background: transparent; color: var(--stamp); box-shadow: inset 0 0 0 1px var(--stamp); }
+    .err { color: var(--stamp); }
+    .empty, .muted { color: var(--muted); padding: 0.8rem; margin: 0; }
+    details { padding: 0.6rem 0.8rem; border-top: 1px solid var(--rule); }
+    label { display: block; margin-top: 0.4rem; }
+    input[type=url] { width: 100%; box-sizing: border-box; }
+    .forms { padding: 0.6rem 0.8rem; border-top: 1px solid var(--rule); }
+    .forms h2 { margin: 0 0 0.3rem; font: 600 0.85rem "Arial Narrow", sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--cabinet); }
+    .flag { display: flex; gap: 0.4rem; align-items: flex-start; margin-top: 0.35rem; }
+    .flag input { margin-top: 0.2rem; }
+    .small { font-size: 0.8rem; padding: 0; }
+    .forms .muted { padding: 0; }
+    .sites { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+    .sites li { display: flex; justify-content: space-between; align-items: center; padding: 0.15rem 0; border: 0; font-size: 0.85rem; }
+    .sites button { padding: 0 0.4rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>JobScout</h1>
+    <a href="#" id="open-panel">Abrir painel</a>
+  </header>
+  <p class="muted" id="status">Conectando…</p>
+  <ol id="list"></ol>
+  <section class="forms">
+    <h2>Formulários de candidatura</h2>
+    <p class="muted small" id="forms-here">…</p>
+    <label class="flag"><input type="checkbox" id="forms-site"> <span>Ajudar a preencher <strong id="forms-host">neste site</strong></span></label>
+    <label class="flag"><input type="checkbox" id="forms-all"> <span>Em todos os sites de vagas<br><span class="muted small">Só em páginas que parecem candidatura (vaga, currículo, LinkedIn…). Login, compra e contato ficam de fora.</span></span></label>
+    <ul class="sites" id="forms-sites"></ul>
+    <p class="err" id="forms-error"></p>
+  </section>
+  <details>
+    <summary>Ajustes</summary>
+    <label>Endereço do JobScout <input type="url" id="backend"></label>
+    <label><input type="checkbox" id="autofill"> Preencher campos padrão (nome, e-mail, telefone…)</label>
+    <label><input type="checkbox" id="suggestions"> Sugerir respostas ao lado das perguntas (você clica em Usar)</label>
+    <p class="muted">Respostas abertas sempre passam pelo rascunho. O botão Enviar é sempre seu.</p>
+  </details>
+  <script src="popup.js"></script>
+</body>
+</html>
