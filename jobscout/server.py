@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 
-from jobscout import appearance, cv, exporting, fx, imap_mail, insights, jobsearch, linkedin_public, llm, mail, preferences, reminders, replies, resume_tools, tray
+from jobscout import appearance, cv, exporting, freela, fx, imap_mail, insights, jobsearch, linkedin_public, llm, mail, preferences, reminders, replies, resume_tools, tray
 from jobscout.activities import (
     MAX_BYTES,
     ResumeReadError,
@@ -1061,6 +1061,139 @@ class Handler(BaseHTTPRequestHandler):
         """A extensão lê a conversa aberta: recrutador oferecendo vaga nova vira rascunho de oportunidade."""
         self.app.extension_seen = time.time()
         self._send_json(200, self.app.assistant.chat_approach(self._json()))
+
+    # Freela: oportunidades, estimativas, contratos PJ, retornos e recebimentos
+
+    @route("GET", "/api/freelas")
+    def freela_board(self) -> None:
+        self._send_json(200, self.app.assistant.freela_board())
+
+    @route("POST", "/api/freelas")
+    def freela_create(self) -> None:
+        self._panel_only()
+        self._send_json(201, self.app.assistant.freela_create(self._json()))
+
+    @route("GET", r"/api/freelas/(\d+)")
+    def freela_detail(self, freela_id: str) -> None:
+        self._send_json(200, self.app.assistant.freela_detail(int(freela_id)))
+
+    @route("PATCH", r"/api/freelas/(\d+)")
+    def freela_update(self, freela_id: str) -> None:
+        self._panel_only()
+        self._send_json(200, self.app.assistant.freela_update(int(freela_id), self._json()))
+
+    @route("POST", r"/api/freelas/(\d+)/remover")
+    def freela_remove(self, freela_id: str) -> None:
+        self._panel_only()
+        self.app.store.delete_freela(int(freela_id))
+        self.app.hub.publish("freela")
+        self._send_json(200, {"ok": True})
+
+    @route("POST", "/api/freelas/estimar")
+    def freela_ai_estimate(self) -> None:
+        self._panel_only()
+        scope = str(self._json().get("escopo") or "").strip()
+        if not scope:
+            raise ApiError(422, "Escreva o escopo do pedido.")
+        try:
+            self._send_json(200, freela.ai_estimate(scope))
+        except llm.LLMUnavailable as exc:
+            raise ApiError(503, str(exc)) from exc
+
+    @route("POST", r"/api/freelas/(\d+)/estimativas")
+    def freela_estimate_add(self, freela_id: str) -> None:
+        self._panel_only()
+        self.app.assistant._freela(int(freela_id))
+        self.app.store.add_freela_estimate(int(freela_id), freela.clean_estimate(self._json()))
+        self.app.hub.publish("freela")
+        self._send_json(201, self.app.assistant.freela_detail(int(freela_id)))
+
+    @route("PUT", r"/api/freelas/estimativas/(\d+)")
+    def freela_estimate_edit(self, estimate_id: str) -> None:
+        self._panel_only()
+        row = self.app.store.freela_estimate(int(estimate_id))
+        if row is None:
+            raise LookupError(f"Estimativa {estimate_id} não encontrada.")
+        self.app.store.update_freela_estimate(int(estimate_id), freela.clean_estimate(self._json()))
+        self.app.hub.publish("freela")
+        self._send_json(200, self.app.assistant.freela_detail(row["freela_id"]))
+
+    @route("POST", r"/api/freelas/estimativas/(\d+)/remover")
+    def freela_estimate_remove(self, estimate_id: str) -> None:
+        self._panel_only()
+        self.app.store.delete_freela_estimate(int(estimate_id))
+        self._send_json(200, {"ok": True})
+
+    @route("POST", r"/api/freelas/(\d+)/eventos")
+    def freela_event_add(self, freela_id: str) -> None:
+        self._panel_only()
+        data = self._json()
+        text = str(data.get("texto") or "").strip()[:4000]
+        if not text:
+            raise ApiError(422, "Escreva o retorno.")
+        self.app.assistant._freela(int(freela_id))
+        kind = data.get("tipo") if data.get("tipo") in freela.EVENT_KINDS else "retorno"
+        self.app.store.add_freela_event(int(freela_id), kind, str(data.get("canal") or "")[:40], text)
+        self.app.hub.publish("freela")
+        self._send_json(201, self.app.assistant.freela_detail(int(freela_id)))
+
+    @route("POST", r"/api/freelas/eventos/(\d+)/remover")
+    def freela_event_remove(self, event_id: str) -> None:
+        self._panel_only()
+        self.app.store.delete_freela_event(int(event_id))
+        self._send_json(200, {"ok": True})
+
+    @route("POST", r"/api/freelas/(\d+)/pagamentos")
+    def freela_payment_add(self, freela_id: str) -> None:
+        self._panel_only()
+        data = self._json()
+        row = self.app.assistant._freela(int(freela_id))
+        amount = freela._number(data.get("valor"))
+        if not amount:
+            raise ApiError(422, "Informe o valor.")
+        self.app.store.add_freela_payment(int(freela_id), {
+            "description": str(data.get("descricao") or "")[:200], "amount": amount, "currency": data.get("moeda") if data.get("moeda") in freela.CURRENCIES else row["currency"],
+            "due_date": freela._date(data.get("vencimento")), "invoice": str(data.get("nota") or "")[:80],
+        })
+        self.app.hub.publish("freela")
+        self._send_json(201, self.app.assistant.freela_detail(int(freela_id)))
+
+    @route("PATCH", r"/api/freelas/pagamentos/(\d+)")
+    def freela_payment_edit(self, payment_id: str) -> None:
+        self._panel_only()
+        data = self._json()
+        fields: dict[str, Any] = {}
+        if "pago" in data:
+            fields["paid_at"] = now() if data["pago"] else None
+        if "nota" in data:
+            fields["invoice"] = str(data["nota"] or "")[:80]
+        self.app.store.update_freela_payment(int(payment_id), fields)
+        self.app.hub.publish("freela")
+        self._send_json(200, {"ok": True})
+
+    @route("POST", r"/api/freelas/pagamentos/(\d+)/remover")
+    def freela_payment_remove(self, payment_id: str) -> None:
+        self._panel_only()
+        self.app.store.delete_freela_payment(int(payment_id))
+        self._send_json(200, {"ok": True})
+
+    # Página aberta no navegador: a extensão manda só quando a pessoa abre o assistente
+
+    @route("POST", "/api/extensao/pagina")
+    def page_context(self) -> None:
+        self.app.extension_seen = time.time()
+        self._send_json(200, self.app.assistant.page_context(self._json()))
+
+    @route("POST", "/api/extensao/pagina/salvar")
+    def page_save(self) -> None:
+        self._send_json(200, self.app.assistant.page_save(self._json()))
+
+    @route("POST", "/api/extensao/pagina/ia")
+    def page_ai(self) -> None:
+        try:
+            self._send_json(200, self.app.assistant.page_ai(self._json()))
+        except llm.LLMUnavailable as exc:
+            raise ApiError(503, str(exc)) from exc
 
     # Encaixe com o perfil, currículo enviado e chat da aba Busca
 

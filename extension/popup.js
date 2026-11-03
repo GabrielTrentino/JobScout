@@ -108,6 +108,8 @@ const formsHost = document.getElementById("forms-host");
 const formsHere = document.getElementById("forms-here");
 const formsList = document.getElementById("forms-sites");
 const formsError = document.getElementById("forms-error");
+const assistAny = document.getElementById("assist-any");
+const assistError = document.getElementById("assist-error");
 let tab = null;
 let origin = "";
 
@@ -119,6 +121,7 @@ async function renderForms() {
   const state = await ask({ kind: "forms_state" });
   const sites = state.formSites || [];
   formsAll.checked = Boolean(state.formAll);
+  assistAny.checked = Boolean(state.assistAny);
   let host = "";
   try {
     const url = new URL(tab && tab.url ? tab.url : "");
@@ -181,7 +184,22 @@ formsAll.addEventListener("change", async () => {
     }
   }
   await ask({ kind: "forms_set", all: formsAll.checked, on: formsAll.checked, tabId: tab && tab.id });
-  if (!formsAll.checked) chrome.permissions.remove({ origins: ["https://*/*", "http://*/*"] });
+  if (!formsAll.checked && !assistAny.checked) chrome.permissions.remove({ origins: ["https://*/*", "http://*/*"] });
+  renderForms();
+});
+
+assistAny.addEventListener("change", async () => {
+  assistError.textContent = "";
+  if (assistAny.checked) {
+    const granted = await chrome.permissions.request({ origins: ["https://*/*", "http://*/*"] });
+    if (!granted) {
+      assistAny.checked = false;
+      assistError.textContent = "O assistente precisa da permissão do Chrome para todos os sites.";
+      return;
+    }
+  }
+  await ask({ kind: "forms_set", assist: assistAny.checked, tabId: tab && tab.id });
+  if (!formsAll.checked && !assistAny.checked) chrome.permissions.remove({ origins: ["https://*/*", "http://*/*"] });
   renderForms();
 });
 

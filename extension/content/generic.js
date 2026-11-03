@@ -108,9 +108,10 @@
 
   // "Neste site" (lista do popup) libera qualquer formulário; "todos os sites" só candidaturas.
   try {
-    chrome.storage.local.get({ formSites: [] }, (stored) => {
+    chrome.storage.local.get({ formSites: [], formAll: false }, (stored) => {
       explicit = (stored.formSites || []).includes(location.origin);
-      begin();
+      // O script também é registrado para o assistente de página: formulário só com a opção de formulário ligada.
+      if (explicit || stored.formAll) begin();
     });
   } catch (error) {
     begin();

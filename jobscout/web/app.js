@@ -41,7 +41,7 @@ const TOAST_LEVELS = [
 // Larguras do overlay (overlay.py) e a faixa extra do painel de pontos de melhoria.
 const PANEL_WIDTHS = { painel: 400, amplo: 880 };
 const IMPROVE_WIDTH = 400;
-const WIDE_VIEWS = new Set(["kanban", "empresa", "curriculo", "resultados", "vagas", "busca"]);
+const WIDE_VIEWS = new Set(["kanban", "empresa", "curriculo", "resultados", "vagas", "busca", "freela"]);
 // Bolha sozinha e janela compacta (menu, pop-ups), em pixels lógicos; batem com BUBBLE e MODES do overlay.py.
 const BUBBLE_SIZE = 72;
 const DOCK_WIDTH = 300;
@@ -698,17 +698,36 @@ function bridge() {
 
 // Pede à janela o tamanho do formato atual. Bolha e menu medem o próprio conteúdo.
 // Bolha sem pop-ups: janela do tamanho do boneco, recortada em círculo (overlay.py, BUBBLE).
+// Pedidos numerados: o Python ignora o que chegar fora de ordem.
+let fitRequest = 0;
+let fitCheck = null;
+
+// Depois de redimensionar, confere se a página acompanhou a janela; se não, força o layout de novo.
+function checkFit() {
+  clearTimeout(fitCheck);
+  fitCheck = setTimeout(async () => {
+    const api = bridge();
+    if (!api || !api.medir) return;
+    const size = await api.medir();
+    if (!size || size.length < 2) return;
+    if (Math.abs(size[0] - window.innerWidth) > 3 || Math.abs(size[1] - window.innerHeight) > 3) {
+      api.ajustar(`janela=${size[0]}x${size[1]} pagina=${window.innerWidth}x${window.innerHeight} visao=${state.view}`);
+    }
+  }, 500);
+}
+
 function fitWindow() {
   if (!state.overlay) return;
   const api = bridge();
   if (!api) return;
+  checkFit();
   requestAnimationFrame(() => {
     const compact = state.mode === "bolha" || state.mode === "menu";
     const dock = document.getElementById("dock");
     const orbOnly = state.mode === "bolha" && !document.getElementById("toasts").children.length;
     document.body.classList.toggle("orb-only", orbOnly);
     if (orbOnly) {
-      api.formato("bolha", BUBBLE_SIZE, BUBBLE_SIZE, state.rascunhos.length ? "orb-badge" : "orb");
+      api.formato("bolha", BUBBLE_SIZE, BUBBLE_SIZE, state.rascunhos.length ? "orb-badge" : "orb", ++fitRequest);
       return;
     }
     const height = compact ? Math.ceil([...dock.children].reduce((sum, node) => sum + (node.hidden ? 0 : node.offsetHeight), 0) + 2) : 0;
@@ -717,7 +736,7 @@ function fitWindow() {
     const side = !compact && ((state.improveOpen && state.view === "curriculo") || (state.presetsOpen && state.view === "vagas"));
     document.body.classList.toggle("improve-side", side);
     const width = compact ? DOCK_WIDTH : side ? (PANEL_WIDTHS[state.mode] || PANEL_WIDTHS.painel) + IMPROVE_WIDTH : 0;
-    api.formato(state.mode, height, width, "");
+    api.formato(state.mode, height, width, "", ++fitRequest);
   });
 }
 
@@ -746,6 +765,11 @@ function setupDrag() {
 function setMode(mode) {
   if (!state.overlay) return;
   state.mode = mode;
+  // A janela compacta não comporta o detalhe aberto: ele fecha junto.
+  if (mode === "bolha" || mode === "menu") {
+    const drawer = document.getElementById("drawer");
+    if (drawer.open) drawer.close();
+  }
   for (const name of ["bolha", "menu", "painel", "amplo"]) document.body.classList.toggle("mode-" + name, name === mode);
   document.getElementById("menu").hidden = mode !== "menu";
   document.getElementById("bubble").setAttribute("aria-expanded", String(mode === "menu"));
@@ -2771,7 +2795,7 @@ function reminderLine(reminder, due, onChange) {
   );
 }
 
-function reminderForm(job, data, onSaved) {
+function reminderForm(job, data, onSaved, about = "") {
   const notice = h("span", { class: "notice", role: "status" });
   const preset = h("select", { "aria-label": "Tipo de lembrete" }, data.modelos.map((item) => h("option", { value: item.chave, text: item.nome })));
   const title = h("input", { "aria-label": "Título", placeholder: "Título" });
@@ -2781,7 +2805,7 @@ function reminderForm(job, data, onSaved) {
   const toCalendar = h("input", { type: "checkbox", checked: data.agenda.conectada, disabled: !data.agenda.conectada });
   const fill = () => {
     const item = data.modelos.find((row) => row.chave === preset.value);
-    title.value = item.titulo;
+    title.value = about ? `${item.titulo}: ${about}` : item.titulo;
     whenInput.value = item.quando.slice(0, 16);
     every.value = item.cada;
     times.value = item.vezes;
@@ -3743,7 +3767,326 @@ function fitSection(job, detail) {
   );
 }
 
+// Detalhe de vaga ou rascunho nunca abre na janela pequena da bolha ou do menu.
+function expandForDetail() {
+  if (state.overlay && (state.mode === "bolha" || state.mode === "menu")) setMode("painel");
+}
+
+// Freela: oportunidades, estimativas, contratos PJ, retornos e recebimentos
+
+const FREELA_EVENTS = { retorno: "Retorno do cliente", enviado: "Enviei", nota: "Anotação" };
+const ESTIMATE_STATES = { rascunho: "Rascunho", enviada: "Enviada", aprovada: "Aprovada", recusada: "Recusada" };
+
+function moneyText(value, currency) {
+  return Number(value || 0).toLocaleString("pt-BR", { style: "currency", currency });
+}
+
+function moneyTotals(totals) {
+  const parts = Object.entries(totals || {}).map(([currency, value]) => moneyText(value, currency));
+  return parts.length ? parts.join(" + ") : moneyText(0, "BRL");
+}
+
+function dayText(value) {
+  return value ? value.slice(0, 10).split("-").reverse().join("/") : "";
+}
+
+function freelaValue(row) {
+  if (row.kind === "hora" && row.rate_hour) return `${moneyText(row.rate_hour, row.currency)}/h`;
+  if (row.amount) return moneyText(row.amount, row.currency) + (row.kind === "mensal" ? "/mês" : "");
+  return "";
+}
+
+async function renderFreela() {
+  const data = await api("/api/freelas");
+  const summary = data.resumo;
+  state.freelaOptions = data;
+  document.getElementById("freela-tiles").replaceChildren(
+    kpiTile("A receber", moneyTotals(summary.a_receber), summary.atrasados ? `${summary.atrasados} pagamento(s) atrasado(s)` : "nada atrasado"),
+    kpiTile("Recebido no mês", moneyTotals(summary.recebido_mes), "pagamentos marcados como pagos"),
+    kpiTile("Contratos ativos", String(summary.ativos), "fechados ou em andamento"),
+    kpiTile("Estimativas sem retorno", String(summary.estimativas_sem_retorno), "enviadas ao cliente"),
+  );
+  document.getElementById("freela-alerts").replaceChildren(...summary.a_renovar.map((row) =>
+    h("li", {}, h("button", { type: "button", class: "ghost", text: `${row.title || row.client}: vence em ${dayText(row.date)}`, onclick: () => openFreela(row.id) }))));
+  const board = document.getElementById("freela-board");
+  clear(board);
+  for (const status of data.situacoes) {
+    const own = data.projetos.filter((row) => row.status === status.chave);
+    const col = h("section", { class: "col" },
+      h("div", { class: "col-head" }, h("span", { text: status.nome }), h("span", { text: String(own.length) })));
+    col.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      col.classList.add("is-over");
+    });
+    col.addEventListener("dragleave", () => col.classList.remove("is-over"));
+    col.addEventListener("drop", async (event) => {
+      event.preventDefault();
+      col.classList.remove("is-over");
+      const id = event.dataTransfer.getData("text/plain");
+      try {
+        await api(`/api/freelas/${id}`, { method: "PATCH", json: { status: status.chave } });
+        await renderFreela();
+      } catch (error) {
+        alert(error.message);
+      }
+    });
+    for (const row of own) {
+      const value = freelaValue(row);
+      const card = h("button", { type: "button", class: "card", draggable: "true", onclick: () => openFreela(row.id) },
+        h("strong", { text: row.title || row.client }),
+        row.title && row.client ? h("span", { class: "company", text: row.client }) : null,
+        value ? h("span", { class: "when", text: ` · ${value}` }) : null,
+      );
+      card.addEventListener("dragstart", (event) => event.dataTransfer.setData("text/plain", String(row.id)));
+      col.appendChild(card);
+    }
+    board.appendChild(col);
+  }
+}
+
+async function openFreela(id) {
+  expandForDetail();
+  state.drawerJob = null;
+  const drawer = document.getElementById("drawer");
+  if (!drawer.open) drawer.showModal();
+  await renderFreelaDetail(id);
+}
+
+async function renderFreelaDetail(id) {
+  const row = await api(`/api/freelas/${id}`);
+  const body = document.getElementById("drawer-body");
+  const again = async () => {
+    await renderFreelaDetail(id);
+    await renderFreela();
+  };
+  const reminder = await freelaReminder(row);
+  clear(body);
+  body.append(...[
+    h("div", { class: "row", style: "justify-content: space-between" },
+      h("p", { class: "eyebrow", text: `Freela · criado ${when(row.created_at)}` }),
+      h("button", { type: "button", class: "ghost", text: "Fechar", onclick: () => document.getElementById("drawer").close() }),
+    ),
+    h("h2", { class: "title", text: row.title || row.client }),
+    row.source_url ? h("p", {}, h("a", { href: row.source_url, target: "_blank", rel: "noopener", text: "Abrir a página do projeto" })) : null,
+    freelaContract(row, again),
+    freelaEstimates(row, again),
+    freelaEvents(row, again),
+    freelaPayments(row, again),
+    h("details", { class: "freela-block" }, h("summary", { text: "Lembrete" }), reminder),
+    h("button", { type: "button", class: "ghost", text: "Remover este freela", onclick: async () => {
+      if (!confirm("Remover este freela, com estimativas, retornos e pagamentos?")) return;
+      await api(`/api/freelas/${id}/remover`, { method: "POST", json: {} });
+      document.getElementById("drawer").close();
+      await renderFreela();
+    } }),
+  ].filter(Boolean));
+}
+
+function freelaContract(row, onSaved) {
+  const options = state.freelaOptions;
+  const notice = h("span", { class: "notice", role: "status" });
+  const input = (key, label, type = "text") => h("label", {}, label, h("input", { name: key, type, value: row[key] || "", step: type === "number" ? "any" : null, min: type === "number" ? "0" : null }));
+  const pick = (key, label, choices) => h("label", {}, label, h("select", { name: key }, choices.map(([value, text]) => h("option", { value, text, selected: value === row[key] }))));
+  const form = h("form", { class: "freela-form", onsubmit: async (event) => {
+    event.preventDefault();
+    try {
+      await api(`/api/freelas/${row.id}`, { method: "PATCH", json: Object.fromEntries(new FormData(form)) });
+      await onSaved();
+    } catch (error) {
+      notice.textContent = error.message;
+    }
+  } },
+    input("title", "Projeto"), input("client", "Cliente"), input("contact", "Contato"), input("cnpj", "CNPJ do cliente"),
+    pick("status", "Situação", options.situacoes.map((item) => [item.chave, item.nome])),
+    pick("kind", "Tipo", Object.entries(options.tipos)),
+    pick("currency", "Moeda", options.moedas.map((item) => [item, item])),
+    input("rate_hour", "Valor por hora", "number"), input("amount", "Valor fechado ou mensal", "number"), input("hours", "Horas previstas", "number"),
+    input("contract_ref", "Nº do contrato"), input("start_date", "Início", "date"), input("end_date", "Fim", "date"),
+    input("renewal_date", "Renovação", "date"), input("payment_day", "Dia de pagamento", "number"), input("source_url", "Link"),
+    h("label", { class: "wide" }, "Notas", h("textarea", { name: "notes", rows: "3", text: row.notes })),
+    h("div", { class: "row wide" }, h("button", { type: "submit", text: "Salvar contrato" }), notice),
+  );
+  return h("details", { class: "freela-block", open: row.status === "contrato" || row.status === "andamento" }, h("summary", { text: "Contrato PJ" }), form);
+}
+
+function freelaEstimates(row, onSaved) {
+  const box = h("div", {});
+  const editor = (estimate) => box.replaceChildren(estimateEditor(row, estimate, onSaved));
+  const list = row.estimativas.map((item) => {
+    const copied = h("span", { class: "notice", role: "status" });
+    return h("li", { class: "freela-line" },
+      h("span", { text: `${item.name} · ${item.hours}h · ${moneyText(item.total, item.currency)} · ${ESTIMATE_STATES[item.state]}` }),
+      h("span", { class: "row" },
+        h("button", { type: "button", class: "ghost", text: "Copiar", title: "Copia o texto para mandar ao cliente", onclick: async () => {
+          await navigator.clipboard.writeText(item.texto);
+          copied.textContent = "Copiado.";
+        } }),
+        h("button", { type: "button", class: "ghost", text: "Editar", onclick: () => editor(item) }),
+        h("button", { type: "button", class: "ghost", text: "Remover", onclick: async () => {
+          await api(`/api/freelas/estimativas/${item.id}/remover`, { method: "POST", json: {} });
+          await onSaved();
+        } }),
+        copied,
+      ));
+  });
+  return h("details", { class: "freela-block", open: true }, h("summary", { text: `Estimativas (${row.estimativas.length})` }),
+    h("ul", { class: "freela-list" }, list),
+    h("button", { type: "button", class: "ghost", text: "Nova estimativa", onclick: () => editor(null) }),
+    box);
+}
+
+function estimateEditor(row, estimate, onSaved) {
+  const rows = h("div", { class: "estimate-rows" });
+  const total = h("p", { class: "hint" });
+  const rate = h("input", { type: "number", min: "0", step: "any", value: estimate ? estimate.rate : row.rate_hour || "" });
+  const currency = h("select", {}, state.freelaOptions.moedas.map((item) => h("option", { value: item, text: item, selected: item === (estimate ? estimate.currency : row.currency) })));
+  const name = h("input", { value: estimate ? estimate.name : "Estimativa", maxlength: "120" });
+  const valid = h("input", { type: "date", value: (estimate && estimate.valid_until) || "" });
+  const stateField = h("select", {}, Object.entries(ESTIMATE_STATES).map(([value, text]) => h("option", { value, text, selected: value === (estimate ? estimate.state : "rascunho") })));
+  const notes = h("textarea", { rows: "2", placeholder: "Condições, o que não está incluído…", text: estimate ? estimate.notes : "" });
+  const scope = h("textarea", { rows: "3", placeholder: "Escopo do pedido", text: row.notes });
+  const notice = h("span", { class: "notice", role: "status" });
+  const lines = () => [...rows.children].map((line) => ({ descricao: line.children[0].value, horas: line.children[1].value }));
+  const update = () => {
+    const hours = lines().reduce((sum, line) => sum + Number(line.horas || 0), 0);
+    total.textContent = `${hours} horas · ${moneyText(hours * Number(rate.value || 0), currency.value)}`;
+  };
+  const addLine = (item = { descricao: "", horas: "" }) => {
+    const line = h("div", { class: "estimate-row" },
+      h("input", { value: item.descricao, placeholder: "Etapa", "aria-label": "Etapa", maxlength: "200", oninput: update }),
+      h("input", { type: "number", min: "0", step: "any", value: item.horas, placeholder: "Horas", "aria-label": "Horas", oninput: update }),
+      h("button", { type: "button", class: "ghost", text: "×", "aria-label": "Tirar etapa", onclick: () => {
+        line.remove();
+        update();
+      } }));
+    rows.append(line);
+    update();
+  };
+  (estimate ? estimate.items : [{ descricao: "", horas: "" }]).forEach(addLine);
+  rate.addEventListener("input", update);
+  currency.addEventListener("change", update);
+  const askAI = h("button", { type: "button", class: "ghost", text: "Sugerir etapas com IA", onclick: async () => {
+    askAI.disabled = true;
+    notice.textContent = "A IA está quebrando o escopo…";
+    try {
+      const answer = await api("/api/freelas/estimar", { method: "POST", json: { escopo: scope.value } });
+      rows.replaceChildren();
+      answer.itens.forEach(addLine);
+      notes.value = answer.premissas.length ? "Premissas: " + answer.premissas.join("; ") : notes.value;
+      notice.textContent = "As horas são palpite da IA: revise antes de mandar.";
+    } catch (error) {
+      notice.textContent = error.message;
+    }
+    askAI.disabled = false;
+  } });
+  return h("form", { class: "estimate-editor", onsubmit: async (event) => {
+    event.preventDefault();
+    const json = { nome: name.value, itens: lines(), valor_hora: rate.value, moeda: currency.value, validade: valid.value, estado: stateField.value, notas: notes.value };
+    try {
+      if (estimate) await api(`/api/freelas/estimativas/${estimate.id}`, { method: "PUT", json });
+      else await api(`/api/freelas/${row.id}/estimativas`, { method: "POST", json });
+      await onSaved();
+    } catch (error) {
+      notice.textContent = error.message;
+    }
+  } },
+    scope, askAI, rows,
+    h("button", { type: "button", class: "ghost", text: "Adicionar etapa", onclick: () => addLine() }),
+    h("div", { class: "freela-form" },
+      h("label", {}, "Nome", name), h("label", {}, "Valor por hora", rate), h("label", {}, "Moeda", currency),
+      h("label", {}, "Validade", valid), h("label", {}, "Situação", stateField),
+      h("label", { class: "wide" }, "Observações", notes)),
+    total,
+    h("div", { class: "row" }, h("button", { type: "submit", text: "Salvar estimativa" }), notice));
+}
+
+function freelaEvents(row, onSaved) {
+  const kind = h("select", { "aria-label": "Tipo" }, Object.entries(FREELA_EVENTS).map(([value, text]) => h("option", { value, text })));
+  const channel = h("input", { placeholder: "Canal (e-mail, WhatsApp…)", "aria-label": "Canal", maxlength: "40" });
+  const text = h("textarea", { rows: "2", placeholder: "O que o cliente disse ou o que você enviou", "aria-label": "Texto" });
+  const notice = h("span", { class: "notice", role: "status" });
+  return h("details", { class: "freela-block", open: true }, h("summary", { text: `Retornos (${row.eventos.length})` }),
+    h("form", { class: "stack", onsubmit: async (event) => {
+      event.preventDefault();
+      try {
+        await api(`/api/freelas/${row.id}/eventos`, { method: "POST", json: { tipo: kind.value, canal: channel.value, texto: text.value } });
+        await onSaved();
+      } catch (error) {
+        notice.textContent = error.message;
+      }
+    } }, h("div", { class: "row" }, kind, channel), text, h("div", { class: "row" }, h("button", { type: "submit", text: "Registrar" }), notice)),
+    h("ul", { class: "freela-list" }, row.eventos.map((item) => h("li", { class: "freela-line" },
+      h("span", {},
+        h("strong", { text: FREELA_EVENTS[item.kind] }),
+        h("span", { class: "hint", text: ` · ${when(item.at)}${item.channel ? " · " + item.channel : ""}` }),
+        h("span", { class: "freela-text", text: item.text })),
+      h("button", { type: "button", class: "ghost", text: "Remover", onclick: async () => {
+        await api(`/api/freelas/eventos/${item.id}/remover`, { method: "POST", json: {} });
+        await onSaved();
+      } })))));
+}
+
+function freelaPayments(row, onSaved) {
+  const description = h("input", { placeholder: "Descrição (ex.: parcela 1)", "aria-label": "Descrição", maxlength: "200" });
+  const amount = h("input", { type: "number", min: "0", step: "any", placeholder: "Valor", "aria-label": "Valor" });
+  const due = h("input", { type: "date", "aria-label": "Vencimento", title: "Vencimento" });
+  const invoice = h("input", { placeholder: "Nº da nota fiscal", "aria-label": "Nota fiscal", maxlength: "80" });
+  const notice = h("span", { class: "notice", role: "status" });
+  const today = new Date().toISOString().slice(0, 10);
+  return h("details", { class: "freela-block", open: row.pagamentos.length > 0 }, h("summary", { text: `Recebimentos (${row.pagamentos.length})` }),
+    h("form", { class: "row", onsubmit: async (event) => {
+      event.preventDefault();
+      try {
+        await api(`/api/freelas/${row.id}/pagamentos`, { method: "POST", json: { descricao: description.value, valor: amount.value, vencimento: due.value, nota: invoice.value } });
+        await onSaved();
+      } catch (error) {
+        notice.textContent = error.message;
+      }
+    } }, description, amount, due, invoice, h("button", { type: "submit", text: "Adicionar" }), notice),
+    h("ul", { class: "freela-list" }, row.pagamentos.map((item) => {
+      const late = !item.paid_at && item.due_date && item.due_date < today;
+      return h("li", { class: "freela-line" },
+        h("label", { class: "check" },
+          h("input", { type: "checkbox", checked: Boolean(item.paid_at), onchange: async (event) => {
+            await api(`/api/freelas/pagamentos/${item.id}`, { method: "PATCH", json: { pago: event.target.checked } });
+            await onSaved();
+          } }),
+          ` ${item.description || "Pagamento"} · ${moneyText(item.amount, item.currency)}${item.due_date ? " · vence " + dayText(item.due_date) : ""}${item.invoice ? " · NF " + item.invoice : ""}`),
+        h("span", { class: "row" },
+          late ? h("span", { class: "cold", text: "Atrasado" }) : null,
+          h("button", { type: "button", class: "ghost", text: "Remover", onclick: async () => {
+            await api(`/api/freelas/pagamentos/${item.id}/remover`, { method: "POST", json: {} });
+            await onSaved();
+          } })));
+    })));
+}
+
+async function freelaReminder(row) {
+  const data = await api("/api/lembretes");
+  return reminderForm(null, data, () => renderFreelaDetail(row.id), row.client || row.title);
+}
+
+function setupFreela() {
+  const title = document.getElementById("freela-new-title");
+  const client = document.getElementById("freela-new-client");
+  const notice = document.getElementById("freela-new-notice");
+  document.getElementById("freela-new").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    notice.textContent = "";
+    try {
+      const saved = await api("/api/freelas", { method: "POST", json: { title: title.value, client: client.value } });
+      title.value = "";
+      client.value = "";
+      await renderFreela();
+      await openFreela(saved.id);
+    } catch (error) {
+      notice.textContent = error.message;
+    }
+  });
+}
+
 async function openJob(id) {
+  expandForDetail();
   state.drawerJob = id;
   const drawer = document.getElementById("drawer");
   if (!drawer.open) drawer.showModal();
@@ -3871,6 +4214,7 @@ async function renderPrep(id, container) {
 }
 
 function openDraft(draft) {
+  expandForDetail();
   state.drawerJob = null;
   const drawer = document.getElementById("drawer");
   const body = document.getElementById("drawer-body");
@@ -3913,6 +4257,7 @@ async function renderView() {
     else if (state.view === "resultados") await renderResultados();
     else if (state.view === "vagas") await renderAutoSearch();
     else if (state.view === "busca") await renderChat();
+    else if (state.view === "freela") await renderFreela();
     else if (state.view === "config") renderConfig();
   } catch (error) {
     console.error(error);
@@ -3997,6 +4342,7 @@ function connect() {
 
 function setup() {
   setupTheme();
+  setupFreela();
   setupOverlay();
   setupPrefs();
   setupAI();
@@ -4009,7 +4355,7 @@ function setup() {
   setupChat();
   setupLook();
   setupBackground();
-  const views = ["agora", "rascunhos", "linha", "kanban", "empresas", "busca", "vagas", "mensagens", "resultados", "curriculo", "perfil", "config"];
+  const views = ["agora", "rascunhos", "linha", "kanban", "empresas", "busca", "vagas", "freela", "mensagens", "resultados", "curriculo", "perfil", "config"];
   const fallback = state.overlay ? "agora" : "rascunhos";
   const fromHash = () => {
     const name = location.hash.slice(1);

@@ -189,6 +189,17 @@ A tela Currículo junta o texto do currículo (antes no Perfil) e o que sai dele
 - Presets (`busca_presets`): buscas com nome, no painel lateral da aba Busca de vagas. Os marcados "Buscar sozinho" rodam junto com a busca automática; "Buscar agora" roda só o formulário.
 - Os resultados ficam em `search_results`; vaga já salva não entra, e o que já apareceu (mesmo descartado) não volta. "Salvar vaga" cria a vaga como Visualizada.
 
+## Freela e assistente da página
+
+Módulo `jobscout/freela.py`. Tabelas `freelas`, `freela_estimates`, `freela_events` e `freela_payments`, com remoção em cascata.
+
+- Situações: prospecção, estimativa enviada, negociação, contrato fechado, em andamento, concluído e perdido.
+- Tipos: projeto fechado, por hora e mensal. Moedas: BRL, USD e EUR, somadas sempre em separado.
+- O total da estimativa é calculado das linhas no servidor; nunca vem digitado.
+- A tarefa de IA `freela` só recebe o escopo escrito pela pessoa, por isso não é privada. Ela devolve etapas e horas, nunca dinheiro.
+
+O assistente (`extension/content/assist.js`) só existe com `assistAny` ligado no popup, que pede a permissão de todos os sites. O script é registrado junto com o de formulários, e `generic.js` só começa com a opção de formulário ligada: um não liga o outro. Nada sai da página antes do clique. Depois dele, a extensão manda endereço, título e texto visível (até 20 mil caracteres) para o JobScout local. Resumo, encaixe e proposta usam a tarefa privada `chat`, que fica no modelo local. Salvar como vaga passa por Rascunhos; salvar como freela grava direto, porque não publica nada.
+
 ## Busca (chat) e encaixe
 
 - A aba Busca é um chat com histórico (`chat_threads`, `chat_messages`). Cada pergunta procura nos registros (`assistant.search`) e, com a tarefa privada "chat", a IA responde só com esses trechos; sem IA, lista o que achou. Cada resposta mostra as fontes.
@@ -358,6 +369,10 @@ Nos formulários, a IA entra depois das regras ([jobscout/ai_suggest.py](../jobs
 | GET/POST | `/api/gmail/conectar`, `/retorno`, `/verificar`, `/desconectar` | Google (Gmail e Agenda) |
 
 Requisições com `Origin` de outro site são recusadas (403); só o próprio painel e `chrome-extension://` passam. Preferências, pasta e exportação aceitam só o painel.
+
+Freela: `GET|POST /api/freelas`, `GET|PATCH /api/freelas/{id}`, `POST /api/freelas/{id}/remover`, `POST /api/freelas/estimar`, `POST /api/freelas/{id}/estimativas`, `PUT /api/freelas/estimativas/{id}`, `POST /api/freelas/estimativas/{id}/remover`, `POST /api/freelas/{id}/eventos`, `POST /api/freelas/eventos/{id}/remover`, `POST /api/freelas/{id}/pagamentos`, `PATCH /api/freelas/pagamentos/{id}`, `POST /api/freelas/pagamentos/{id}/remover`.
+
+Assistente da página, só para a extensão: `POST /api/extensao/pagina`, `POST /api/extensao/pagina/salvar`, `POST /api/extensao/pagina/ia`.
 
 ## Riscos e limites
 

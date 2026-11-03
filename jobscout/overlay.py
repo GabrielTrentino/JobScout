@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import threading
 import time
 import webbrowser
 from dataclasses import dataclass
@@ -247,6 +248,10 @@ class Bridge:
         self._handle = 0
         self._hidden = False
         self._tray = None
+        # O pywebview chama cada função numa thread: os pedidos de tamanho entram um por vez e em ordem.
+        self._shape_lock = threading.Lock()
+        self._last_request = 0
+        self._diagnostics: Path | None = None
 
     def _hwnd(self) -> int:
         # Janela escondida some da lista do Windows: guarda o HWND da primeira vez.
@@ -261,15 +266,50 @@ class Bridge:
         place(hwnd, self._mode, self._height, self._width, self._shape, self._anchor)
         return True
 
-    def formato(self, mode: str, height: int = 0, width: int = 0, shape: str = "") -> bool:
+    def formato(self, mode: str, height: int = 0, width: int = 0, shape: str = "", pedido: int = 0) -> bool:
         """bolha e menu: tamanho e recorte pedidos pela página; painel e amplo: altura da tela."""
         if mode not in MODES:
             return False
-        self._mode = mode
-        self._height = int(height or 0)
-        self._width = int(width or 0)
-        self._shape = shape if shape in ("orb", "orb-badge") else ""
-        return self.encaixar()
+        with self._shape_lock:
+            # Pedido antigo que chegou atrasado não desfaz o mais novo.
+            if pedido and pedido < self._last_request:
+                return False
+            self._last_request = pedido or self._last_request
+            self._mode = mode
+            self._height = int(height or 0)
+            self._width = int(width or 0)
+            self._shape = shape if shape in ("orb", "orb-badge") else ""
+            return self.encaixar()
+
+    def medir(self) -> list[int]:
+        """Tamanho da janela em pixels lógicos, para a página conferir se acompanhou."""
+        hwnd = self._hwnd()
+        if not hwnd:
+            return []
+        rect = _Rect()
+        user32 = ctypes.windll.user32
+        user32.GetClientRect(ctypes.c_void_p(hwnd), ctypes.byref(rect))
+        scale = (user32.GetDpiForWindow(ctypes.c_void_p(hwnd)) or 96) / 96
+        return [round(rect.right / scale), round(rect.bottom / scale)]
+
+    def ajustar(self, detalhe: str = "") -> bool:
+        """A página ficou com tamanho diferente da janela: um pixel a mais e de volta refaz o layout."""
+        hwnd = self._hwnd()
+        if not hwnd or self._hidden:
+            return False
+        if self._diagnostics:
+            try:
+                with self._diagnostics.open("a", encoding="utf-8") as log:
+                    log.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} modo={self._mode} {detalhe}\n")
+            except OSError:
+                pass
+        with self._shape_lock:
+            rect = _Rect()
+            ctypes.windll.user32.GetWindowRect(ctypes.c_void_p(hwnd), ctypes.byref(rect))
+            ctypes.windll.user32.SetWindowPos(
+                ctypes.c_void_p(hwnd), None, rect.left, rect.top, rect.right - rect.left + 1, rect.bottom - rect.top, SWP_NOZORDER | SWP_NOACTIVATE,
+            )
+            return self.encaixar()
 
     def arrastar(self, x: float = 0, y: float = 0) -> bool:
         """A página chama ao perceber um arraste na bolha, com o ponto onde o clique pegou; volta ao soltar.
@@ -357,6 +397,8 @@ def run(panel_url: str, on_closed, *, icon: Path | None = None, hidden: bool = F
 
     area = work_area()
     bridge = Bridge(panel_url)
+    if icon:
+        bridge._diagnostics = icon.with_name("janela.log")
     window = webview.create_window(
         "JobScout",
         panel_url + "?overlay=1#agora",

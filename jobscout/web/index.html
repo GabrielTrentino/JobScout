@@ -22,6 +22,7 @@
       <button type="button" class="menu-item" data-go="empresas">Empresas</button>
       <button type="button" class="menu-item" data-go="busca">Busca (chat)</button>
       <button type="button" class="menu-item" data-go="vagas">Busca de vagas</button>
+      <button type="button" class="menu-item" data-go="freela">Freela</button>
       <button type="button" class="menu-item" data-go="mensagens">Mensagens</button>
       <button type="button" class="menu-item" data-go="resultados">Resultados</button>
       <button type="button" class="menu-item" data-go="curriculo">Currículo <span class="badge" id="menu-cv-badge" hidden>0</span></button>
@@ -89,6 +90,7 @@
         <a class="tablink" href="#empresas" data-view="empresas">Empresas</a>
         <a class="tablink" href="#busca" data-view="busca">Busca</a>
         <a class="tablink" href="#vagas" data-view="vagas">Busca de vagas</a>
+        <a class="tablink" href="#freela" data-view="freela">Freela</a>
         <a class="tablink" href="#curriculo" data-view="curriculo">Currículo</a>
         <a class="tablink" href="#mensagens" data-view="mensagens">Mensagens</a>
         <a class="tablink" href="#resultados" data-view="resultados">Resultados</a>
@@ -284,6 +286,22 @@
         </section>
         </div>
         </div>
+      </section>
+
+      <section class="view" id="view-freela" aria-labelledby="t-freela" hidden>
+        <div class="view-head">
+          <h1 id="t-freela">Freela</h1>
+          <p class="lede">Oportunidades, estimativas, contratos PJ, retornos e recebimentos. Arraste o card para mudar a situação.</p>
+        </div>
+        <div class="kpi-tiles" id="freela-tiles"></div>
+        <ul class="freela-alerts" id="freela-alerts"></ul>
+        <form class="row freela-new" id="freela-new">
+          <input id="freela-new-title" aria-label="Projeto" placeholder="Projeto" maxlength="160">
+          <input id="freela-new-client" aria-label="Cliente" placeholder="Cliente" maxlength="160">
+          <button type="submit">Novo freela</button>
+          <span class="notice" id="freela-new-notice" role="status"></span>
+        </form>
+        <div class="board" id="freela-board"></div>
       </section>
 
       <section class="view" id="view-perfil" aria-labelledby="t-perfil" hidden>

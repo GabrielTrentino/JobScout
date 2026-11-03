@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-from jobscout import ai_suggest, approach, cv, insights, linkedin_public, llm, pipeline, places, replies, suggest
+from jobscout import ai_suggest, approach, cv, freela, insights, linkedin_public, llm, pipeline, places, replies, suggest
 from jobscout.activities import clean_space, fold, list_tools
 from jobscout.events import Hub
 from jobscout.profile import Profile, as_prompt
@@ -1449,6 +1449,106 @@ class Assistant:
         except llm.LLMUnavailable as exc:
             return f"A IA não respondeu ({exc}). Os trechos do histórico estão abaixo.", "regras"
         return reply or "Não encontrei isso no histórico.", "ia"
+
+    # Freela
+
+    def _freela(self, freela_id: int) -> dict[str, Any]:
+        row = self.store.freela(freela_id)
+        if row is None:
+            raise LookupError(f"Freela {freela_id} não encontrado.")
+        return row
+
+    def freela_detail(self, freela_id: int) -> dict[str, Any]:
+        row = self._freela(freela_id)
+        estimates = [{**item, "texto": freela.estimate_text(row, item)} for item in self.store.freela_estimates(freela_id)]
+        return {**row, "estimativas": estimates, "eventos": self.store.freela_events(freela_id), "pagamentos": self.store.freela_payments(freela_id)}
+
+    def freela_board(self) -> dict[str, Any]:
+        rows = self.store.freelas()
+        estimates = self.store.freela_estimates()
+        return {
+            "situacoes": [{"chave": key, "nome": name} for key, name in freela.STATUSES], "tipos": freela.KINDS, "moedas": freela.CURRENCIES,
+            "projetos": rows, "resumo": freela.summary(rows, self.store.freela_payments(), estimates),
+        }
+
+    def freela_create(self, data: dict[str, Any]) -> dict[str, Any]:
+        fields = freela.clean(data)
+        url = fields.get("source_url") or ""
+        existing = self.store.freela_by_url(url) if url else None
+        if existing:
+            return self.freela_detail(existing["id"])
+        freela_id = self.store.add_freela(fields)
+        self.store.log("freela", f"Freela: {fields.get('title') or fields.get('client')}", "painel")
+        self.hub.publish("freela")
+        return self.freela_detail(freela_id)
+
+    def freela_update(self, freela_id: int, data: dict[str, Any]) -> dict[str, Any]:
+        self._freela(freela_id)
+        self.store.update_freela(freela_id, freela.clean(data, partial=True))
+        self.hub.publish("freela")
+        return self.freela_detail(freela_id)
+
+    # Página aberta no navegador
+
+    def page_context(self, data: dict[str, Any]) -> dict[str, Any]:
+        """O que a página é para a pessoa: vaga ou freela, o que já está salvo e o encaixe com o perfil."""
+        url = str(data.get("url") or "")[:800]
+        title = clean_space(str(data.get("titulo") or ""))[:300]
+        text = str(data.get("texto") or "")[:20000]
+        facts = freela.page_facts(url, title, text, self.my_skills())
+        try:
+            job = self.store.job_by_url(normalize_url(url))
+        except DraftError:
+            job = None
+        where = fold(f"{title} {data.get('empresa') or ''}")
+        known = [
+            row for row in self.store.jobs()
+            if len(row["company"] or "") >= 3 and re.search(rf"\b{re.escape(fold(row['company']))}\b", where)
+        ]
+        return {
+            **facts,
+            "vaga": _job_brief(job) if job else None,
+            "freela": self.store.freela_by_url(url),
+            "mesma_empresa": [_job_brief(row) for row in known[:5]],
+            "ia": llm.available("chat"),
+        }
+
+    def page_save(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Guarda a página como freela. Vaga continua indo por rascunho, para aprovar."""
+        url = str(data.get("url") or "")[:500]
+        text = str(data.get("texto") or "")
+        if data.get("como") == "vaga":
+            drafts = self.intake({"tipo": "job_viewed", "site": "web", "pagina": url, "vaga": {
+                "url": url, "title": str(data.get("titulo") or ""), "company": str(data.get("empresa") or ""), "description": text[:MAX_DESCRIPTION],
+            }})
+            return {"salvo": "vaga", "rascunhos": len(drafts)}
+        facts = freela.page_facts(url, str(data.get("titulo") or ""), text, self.my_skills())
+        saved = self.freela_create({
+            "title": str(data.get("titulo") or "")[:160], "client": str(data.get("empresa") or facts["plataforma"])[:160], "source_url": url,
+            "notes": f"Salvo de {facts['plataforma'] or url}.\n\n{text[:3000]}",
+        })
+        return {"salvo": "freela", "id": saved["id"]}
+
+    def page_ai(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Só no clique: resume a página ou escreve a proposta. Tarefa privada: fica no modelo local."""
+        if not llm.available("chat"):
+            raise llm.LLMUnavailable("IA desligada. Ligue em Config > IA.")
+        title = clean_space(str(data.get("titulo") or ""))[:300]
+        text = str(data.get("texto") or "")[:8000]
+        ask = {
+            "resumo": "Resuma a página em tópicos curtos: o que é, o que pede e o que a pessoa deveria olhar com atenção.",
+            "encaixe": "Diga o quanto o perfil combina com esta página, o que ajuda e o que falta.",
+            "proposta": (
+                "Escreva a proposta que a própria pessoa do perfil vai mandar ao cliente: curta, direta, no idioma da página. "
+                "Fale como ela, usando eu e minha, e dirija-se ao cliente. Nunca escreva sua experiência nem fale da pessoa de fora. "
+                "Use só fatos do perfil ligados ao pedido. Não diga onde ela mora. Não invente valores nem prazos."
+            ),
+        }.get(str(data.get("pedido")))
+        if ask is None:
+            raise DraftError("Pedido inválido.")
+        prompt = f"Perfil:\n{as_prompt(self.profile.load())[:4000]}\n\nPágina: {title}\n{text}\n\nPedido: {ask}"
+        answer = llm.ask_llm("chat", prompt, system=freela.PAGE_SYSTEM, timeout=150).strip()
+        return {"texto": answer, "modelo": llm.model_name("chat")}
 
     def message_library(self) -> list[dict[str, Any]]:
         return replies.library(self.message_overrides())

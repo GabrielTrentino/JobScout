@@ -59,6 +59,19 @@ A especificação técnica está em [docs/ESPECIFICACAO.md](docs/ESPECIFICACAO.m
 
 A IA é opcional. Sem ela, tudo funciona por regras. Com o [Ollama](https://ollama.com), roda no seu computador e nada sai dele. O Gemini é a opção em nuvem e nunca é usado em e-mails, mensagens e chat, a menos que você libere em `JOBSCOUT_LLM_NUVEM_PRIVADO`.
 
+### Freela
+
+- Quadro próprio, da prospecção ao projeto concluído, com contrato PJ: cliente, CNPJ, valores, datas, renovação e dia de pagamento.
+- Estimativas por etapa e horas, em BRL, USD ou EUR. O total sai das linhas, e o botão Copiar entrega o texto para o cliente. A IA pode sugerir as etapas; as horas são palpite dela.
+- Retornos do cliente, recebimentos com nota fiscal e lembretes de cobrança.
+- Painel com o que falta receber, o que entrou no mês, pagamentos atrasados, contratos a vencer em 30 dias e estimativas sem resposta.
+
+### Assistente da página
+
+- Com a opção ligada no popup, aparece um botão no canto de qualquer página. Ele diz se é vaga ou freela, o que você já salvou dali, o encaixe com as suas skills e os valores citados.
+- Salva a página como vaga (vai para Rascunhos) ou como freela. A IA local resume, avalia o encaixe e escreve uma proposta.
+- O JobScout acompanha a página que você abriu; ele não navega sozinho. O texto só é lido quando você clica, e se houver um trecho selecionado, só ele. WhatsApp e Gmail ficam de fora.
+
 ## Como rodar
 
 Precisa de Windows, Python 3.11 ou mais novo e Google Chrome.
@@ -117,6 +130,8 @@ Em `%USERPROFILE%\.jobscout\`: banco, perfil e preferências. A senha de app fic
 - **Melhoria de item do currículo:** descarta sugestões com frequência, porque a trava é rígida.
 - **Campos fora do padrão:** seletores muito personalizados podem não ser reconhecidos.
 - **Conversão de moeda:** é um botão no Perfil com arredondamento, não automática no formulário.
+- **Freela:** não lê nem guarda o arquivo do contrato, não emite nota fiscal e não calcula imposto. Valores em moedas diferentes não são convertidos entre si.
+- **Assistente da página:** o tipo de página sai de regras simples e pode errar. Só o texto visível é lido, então páginas que carregam o conteúdo em imagem ou em iframe rendem pouco. Testado em páginas de exemplo, não nas plataformas reais de freela.
 - **Modo "todos os sites":** age só em páginas que parecem candidatura. Para outro tipo de formulário, ligue o site específico.
 - **Segurança local:** o painel não tem login e atende só neste computador, sem proteger os dados de outros usuários da mesma conta.
 

@@ -205,6 +205,62 @@ CREATE TABLE IF NOT EXISTS reminders (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS freelas (
+  id INTEGER PRIMARY KEY,
+  title TEXT NOT NULL DEFAULT '',
+  client TEXT NOT NULL DEFAULT '',
+  contact TEXT NOT NULL DEFAULT '',
+  cnpj TEXT NOT NULL DEFAULT '',
+  source_url TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'prospeccao',
+  kind TEXT NOT NULL DEFAULT 'projeto',
+  currency TEXT NOT NULL DEFAULT 'BRL',
+  rate_hour REAL NOT NULL DEFAULT 0,
+  amount REAL NOT NULL DEFAULT 0,
+  hours REAL NOT NULL DEFAULT 0,
+  contract_ref TEXT NOT NULL DEFAULT '',
+  start_date TEXT,
+  end_date TEXT,
+  renewal_date TEXT,
+  payment_day INTEGER NOT NULL DEFAULT 0,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS freela_estimates (
+  id INTEGER PRIMARY KEY,
+  freela_id INTEGER NOT NULL REFERENCES freelas(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  items TEXT NOT NULL DEFAULT '[]',
+  rate REAL NOT NULL DEFAULT 0,
+  hours REAL NOT NULL DEFAULT 0,
+  total REAL NOT NULL DEFAULT 0,
+  currency TEXT NOT NULL DEFAULT 'BRL',
+  valid_until TEXT,
+  state TEXT NOT NULL DEFAULT 'rascunho',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS freela_events (
+  id INTEGER PRIMARY KEY,
+  freela_id INTEGER NOT NULL REFERENCES freelas(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL DEFAULT 'retorno',
+  channel TEXT NOT NULL DEFAULT '',
+  text TEXT NOT NULL,
+  at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS freela_payments (
+  id INTEGER PRIMARY KEY,
+  freela_id INTEGER NOT NULL REFERENCES freelas(id) ON DELETE CASCADE,
+  description TEXT NOT NULL DEFAULT '',
+  amount REAL NOT NULL DEFAULT 0,
+  currency TEXT NOT NULL DEFAULT 'BRL',
+  due_date TEXT,
+  paid_at TEXT,
+  invoice TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS chat_threads (
   id INTEGER PRIMARY KEY,
   title TEXT NOT NULL DEFAULT '',
@@ -841,6 +897,87 @@ class Store:
 
     def set_job_fit(self, job_id: int, data: dict[str, Any]) -> None:
         self._run("UPDATE jobs SET fit_ai = ? WHERE id = ?", (json.dumps(data, ensure_ascii=False), job_id))
+
+    # Freela: projetos, estimativas, retornos e recebimentos
+
+    def _freela_insert(self, table: str, fields: dict[str, Any]) -> int:
+        columns = ", ".join(fields)
+        marks = ", ".join("?" for _ in fields)
+        return self._run(f"INSERT INTO {table} ({columns}) VALUES ({marks})", tuple(fields.values()))
+
+    def add_freela(self, fields: dict[str, Any]) -> int:
+        at = now()
+        return self._freela_insert("freelas", {**fields, "created_at": at, "updated_at": at})
+
+    def update_freela(self, freela_id: int, fields: dict[str, Any]) -> None:
+        if fields:
+            columns = ", ".join(f"{key} = ?" for key in fields)
+            self._run(f"UPDATE freelas SET {columns}, updated_at = ? WHERE id = ?", (*fields.values(), now(), freela_id))
+
+    def delete_freela(self, freela_id: int) -> None:
+        self._run("DELETE FROM freelas WHERE id = ?", (freela_id,))
+
+    def freela(self, freela_id: int) -> dict[str, Any] | None:
+        return self._one("SELECT * FROM freelas WHERE id = ?", (freela_id,))
+
+    def freela_by_url(self, url: str) -> dict[str, Any] | None:
+        return self._one("SELECT * FROM freelas WHERE source_url = ? AND source_url != ''", (url,))
+
+    def freelas(self) -> list[dict[str, Any]]:
+        return self._all("SELECT * FROM freelas ORDER BY updated_at DESC")
+
+    def add_freela_estimate(self, freela_id: int, data: dict[str, Any]) -> int:
+        at = now()
+        return self._freela_insert("freela_estimates", {
+            **data, "items": json.dumps(data["items"], ensure_ascii=False), "freela_id": freela_id, "created_at": at, "updated_at": at,
+        })
+
+    def update_freela_estimate(self, estimate_id: int, data: dict[str, Any]) -> None:
+        fields = {**data, "items": json.dumps(data["items"], ensure_ascii=False), "updated_at": now()}
+        columns = ", ".join(f"{key} = ?" for key in fields)
+        self._run(f"UPDATE freela_estimates SET {columns} WHERE id = ?", (*fields.values(), estimate_id))
+
+    def delete_freela_estimate(self, estimate_id: int) -> None:
+        self._run("DELETE FROM freela_estimates WHERE id = ?", (estimate_id,))
+
+    def freela_estimate(self, estimate_id: int) -> dict[str, Any] | None:
+        row = self._one("SELECT * FROM freela_estimates WHERE id = ?", (estimate_id,))
+        if row:
+            row["items"] = json.loads(row["items"] or "[]")
+        return row
+
+    def freela_estimates(self, freela_id: int | None = None) -> list[dict[str, Any]]:
+        rows = self._all("SELECT * FROM freela_estimates ORDER BY created_at DESC, id DESC") if freela_id is None else self._all(
+            "SELECT * FROM freela_estimates WHERE freela_id = ? ORDER BY created_at DESC, id DESC", (freela_id,))
+        for row in rows:
+            row["items"] = json.loads(row["items"] or "[]")
+        return rows
+
+    def add_freela_event(self, freela_id: int, kind: str, channel: str, text: str) -> int:
+        self.update_freela(freela_id, {})
+        return self._freela_insert("freela_events", {"freela_id": freela_id, "kind": kind, "channel": channel, "text": text, "at": now()})
+
+    def delete_freela_event(self, event_id: int) -> None:
+        self._run("DELETE FROM freela_events WHERE id = ?", (event_id,))
+
+    def freela_events(self, freela_id: int) -> list[dict[str, Any]]:
+        return self._all("SELECT * FROM freela_events WHERE freela_id = ? ORDER BY at DESC, id DESC", (freela_id,))
+
+    def add_freela_payment(self, freela_id: int, data: dict[str, Any]) -> int:
+        return self._freela_insert("freela_payments", {**data, "freela_id": freela_id, "created_at": now()})
+
+    def update_freela_payment(self, payment_id: int, fields: dict[str, Any]) -> None:
+        if fields:
+            columns = ", ".join(f"{key} = ?" for key in fields)
+            self._run(f"UPDATE freela_payments SET {columns} WHERE id = ?", (*fields.values(), payment_id))
+
+    def delete_freela_payment(self, payment_id: int) -> None:
+        self._run("DELETE FROM freela_payments WHERE id = ?", (payment_id,))
+
+    def freela_payments(self, freela_id: int | None = None) -> list[dict[str, Any]]:
+        if freela_id is None:
+            return self._all("SELECT * FROM freela_payments ORDER BY COALESCE(due_date, created_at)")
+        return self._all("SELECT * FROM freela_payments WHERE freela_id = ? ORDER BY COALESCE(due_date, created_at)", (freela_id,))
 
     # Conversas da aba Busca (perguntas sobre o histórico)
 

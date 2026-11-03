@@ -85,18 +85,17 @@ async function flushQueue() {
 // Formulários em outros sites: o popup liga por site (ou em todos os sites de vagas) e pede a permissão;
 // aqui o script genérico é registrado para esses endereços e injetado na aba aberta na hora.
 const FORM_SCRIPT = "jobscout-formularios";
-const FORM_FILES = ["content/core.js", "content/page.js", "content/generic.js"];
+const FORM_FILES = ["content/core.js", "content/page.js", "content/generic.js", "content/assist.js"];
 // Esses já têm adaptador próprio (ou são chats): o genérico não roda neles.
 const OWN_SITES = ["https://www.linkedin.com/*", "https://*.inhire.app/*", "https://*.inhire.com.br/*", "https://web.whatsapp.com/*", "https://mail.google.com/*"];
 
 async function formState() {
-  const { formSites = [], formAll = false } = await chrome.storage.local.get({ formSites: [], formAll: false });
-  return { formSites, formAll };
+  return chrome.storage.local.get({ formSites: [], formAll: false, assistAny: false });
 }
 
 async function syncFormScripts() {
-  const { formSites, formAll } = await formState();
-  const matches = formAll ? ["https://*/*", "http://*/*"] : formSites.map((origin) => origin + "/*");
+  const { formSites, formAll, assistAny } = await formState();
+  const matches = formAll || assistAny ? ["https://*/*", "http://*/*"] : formSites.map((origin) => origin + "/*");
   // Só registra o que tem permissão: se a pessoa tirou a permissão no Chrome, o site sai sozinho.
   const allowed = [];
   for (const pattern of matches) {
@@ -122,9 +121,11 @@ async function injectNow(tabId) {
   }
 }
 
-async function setFormSite({ origin, on, all, tabId }) {
+async function setFormSite({ origin, on, all, assist, tabId }) {
   const state = await formState();
-  if (all !== undefined) {
+  if (assist !== undefined) {
+    state.assistAny = Boolean(assist);
+  } else if (all !== undefined) {
     state.formAll = Boolean(all);
   } else if (origin) {
     const sites = new Set(state.formSites);
@@ -134,7 +135,7 @@ async function setFormSite({ origin, on, all, tabId }) {
   }
   await chrome.storage.local.set(state);
   const result = await syncFormScripts();
-  if ((on || all) && tabId) await injectNow(tabId);
+  if ((on || all || assist) && tabId) await injectNow(tabId);
   return { ...state, ...result };
 }
 
@@ -182,6 +183,13 @@ async function handle(message) {
       return call("/api/extensao/curriculo-pdf", { json: { versao: message.versao } });
     case "chat_approach":
       return call("/api/extensao/chat/abordagem", { json: message.dados });
+    // Assistente da página: só chega aqui depois do clique da pessoa
+    case "page_context":
+      return call("/api/extensao/pagina", { json: message.dados });
+    case "page_save":
+      return call("/api/extensao/pagina/salvar", { json: message.dados });
+    case "page_ai":
+      return call("/api/extensao/pagina/ia", { json: message.dados });
     case "reply":
       return call("/api/mensagens/responder", { json: message.dados });
     case "improvement":

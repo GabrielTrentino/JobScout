@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "JobScout",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Registra vagas e candidaturas e ajuda a preencher formulários de candidatura (LinkedIn, InHire e qualquer site que você ligar) no JobScout deste computador. Sugere respostas a recrutadores no LinkedIn, WhatsApp Web e Gmail. Tudo vira rascunho ou sugestão para você revisar.",
   "minimum_chrome_version": "116",
   "permissions": [
@@ -30,7 +30,8 @@
         "content/core.js",
         "content/page.js",
         "content/chat.js",
-        "content/linkedin.js"
+        "content/linkedin.js",
+        "content/assist.js"
       ],
       "run_at": "document_idle"
     },
@@ -42,7 +43,8 @@
       "js": [
         "content/core.js",
         "content/page.js",
-        "content/inhire.js"
+        "content/inhire.js",
+        "content/assist.js"
       ],
       "run_at": "document_idle"
     },

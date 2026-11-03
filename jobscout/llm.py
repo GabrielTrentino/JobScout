@@ -19,6 +19,7 @@ TASKS = {
     "curriculo": {"variavel": "JOBSCOUT_LLM_CURRICULO", "privada": False, "nome": "Currículo (revisão e versões por vaga)"},
     # Lê a mensagem do recrutador: conversa privada.
     "mensagem": {"variavel": "JOBSCOUT_LLM_MENSAGEM", "privada": True, "nome": "Respostas a recrutador"},
+    "freela": {"variavel": "JOBSCOUT_LLM_FREELA", "privada": False, "nome": "Estimativas de freela"},
     # Lê o histórico (e-mails, respostas, notas): conversa privada.
     "chat": {"variavel": "JOBSCOUT_LLM_CHAT", "privada": True, "nome": "Chat da aba Busca"},
 }
